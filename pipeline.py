@@ -547,7 +547,7 @@ def pipeline_tfo(dataset, continuum, tasks_te, args):
         model.cuda(args.gpu)
     life_model = importlib.import_module(f'Baselines.{args.method}_model')
     # Pass dataset to GSS, AGEM, ER, and DMSG models for accessing full graph
-    if args.method in ['gss', 'agem', 'er', 'ergnn', 'dmsg']:
+    if args.method in ['gss', 'agem', 'er', 'ergnn', 'dmsg', 'tfmas_star']:
         life_model_ins = life_model.NET(model, args, dataset=dataset)
     else:
         life_model_ins = life_model.NET(model, args)
@@ -588,6 +588,8 @@ def pipeline_tfo(dataset, continuum, tasks_te, args):
         features, labels = subgraph.srcdata['feat'], subgraph.dstdata['label'].squeeze()
         torch.cuda.empty_cache()
         
+        if hasattr(life_model_ins, 'set_stream_info'):
+            life_model_ins.set_stream_info(task=t)
         for epoch in range(epochs):
             # Train classification model
             life_model_ins.observe(args, subgraph, features, labels, ids_batch)
@@ -616,7 +618,7 @@ def pipeline_tfocis(dataset, continuum, tasks_te, args):
         model.cuda(args.gpu)
     life_model = importlib.import_module(f'Baselines.{args.method}_model')
     # Pass dataset to GSS, AGEM, ER, and DMSG models for accessing full graph
-    if args.method in ['gss', 'agem', 'er', 'ergnn', 'dmsg']:
+    if args.method in ['gss', 'agem', 'er', 'ergnn', 'dmsg', 'tfmas_star']:
         life_model_ins = life_model.NET(model, args, dataset=dataset)
     else:
         life_model_ins = life_model.NET(model, args)
@@ -654,6 +656,8 @@ def pipeline_tfocis(dataset, continuum, tasks_te, args):
         features, labels = subgraph.srcdata['feat'], subgraph.dstdata['label'].squeeze()
         torch.cuda.empty_cache()
         
+        if hasattr(life_model_ins, 'set_stream_info'):
+            life_model_ins.set_stream_info(task=t)
         for epoch in range(epochs):
             # Train classification model
             life_model_ins.observe_cis(args, subgraph, features, labels, ids_batch)
@@ -687,7 +691,7 @@ def pipeline_tfobb(dataset, data, tasks_te, args):
         model.cuda(args.gpu)
     life_model = importlib.import_module(f'Baselines.{args.method}_model')
 
-    if args.method in ['gss', 'agem', 'er', 'ergnn', 'dmsg']:
+    if args.method in ['gss', 'agem', 'er', 'ergnn', 'dmsg', 'tfmas_star']:
         life_model_ins = life_model.NET(model, args, dataset=dataset)
     else:
         life_model_ins = life_model.NET(model, args)
@@ -734,6 +738,8 @@ def pipeline_tfobb(dataset, data, tasks_te, args):
             features, labels = subgraph.srcdata['feat'], subgraph.dstdata['label'].squeeze()
             torch.cuda.empty_cache()
 
+            if hasattr(life_model_ins, 'set_stream_info'):
+                life_model_ins.set_stream_info(task=t)
             for epoch in range(epochs):
                 # Train classification model
                 life_model_ins.observe_cis(args, subgraph, features, labels, ids_batch)
@@ -870,7 +876,7 @@ def pipeline_gaussian(dataset, data, tasks_te, args):
         merged_subgraph = merged_subgraph.to(device='cuda:{}'.format(args.gpu))
 
     life_model = importlib.import_module(f'Baselines.{args.method}_model')
-    if args.method in ['gss', 'agem', 'er', 'ergnn', 'dmsg']:
+    if args.method in ['gss', 'agem', 'er', 'ergnn', 'dmsg', 'tfmas_star']:
         life_model_ins = life_model.NET(model, args, dataset=dataset)
     else:
         life_model_ins = life_model.NET(model, args)
@@ -908,6 +914,8 @@ def pipeline_gaussian(dataset, data, tasks_te, args):
         if args.cuda:
             local_ids = local_ids.to(device='cuda:{}'.format(args.gpu))
 
+        if hasattr(life_model_ins, 'set_stream_info'):
+            life_model_ins.set_stream_info(weights=weights)
         for _ in range(epochs):
             life_model_ins.observe_cis(args, merged_subgraph, features, labels, local_ids)
 

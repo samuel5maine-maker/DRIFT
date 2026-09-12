@@ -32,3 +32,8 @@ checkpoints/
 
 # Logs
 *.log
+
+# MAS* experiment outputs (raw telemetry is large; provenance is kept)
+telemetry/*
+!telemetry/provenance/
+experiments/logs/

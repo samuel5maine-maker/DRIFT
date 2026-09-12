@@ -1,0 +1,72 @@
+# packages in environment at C:\Users\samue\anaconda3\envs\drift-cpu:
+#
+# Name                    Version                   Build  Channel
+aiohappyeyeballs          2.6.1                    pypi_0    pypi
+aiohttp                   3.13.5                   pypi_0    pypi
+aiosignal                 1.4.0                    pypi_0    pypi
+async-timeout             5.0.1                    pypi_0    pypi
+attrs                     26.1.0                   pypi_0    pypi
+bzip2                     1.0.8                h2bbff1b_6  
+ca-certificates           2026.7.16            haa95532_0  
+certifi                   2026.7.22                pypi_0    pypi
+charset-normalizer        3.4.9                    pypi_0    pypi
+colorama                  0.4.6                    pypi_0    pypi
+contourpy                 1.3.0                    pypi_0    pypi
+cycler                    0.12.1                   pypi_0    pypi
+dgl                       1.1.2                    pypi_0    pypi
+expat                     2.8.2                hd7fb8db_1  
+fonttools                 4.60.2                   pypi_0    pypi
+frozenlist                1.8.0                    pypi_0    pypi
+fsspec                    2025.10.0                pypi_0    pypi
+idna                      3.18                     pypi_0    pypi
+importlib-resources       6.5.2                    pypi_0    pypi
+jinja2                    3.1.6                    pypi_0    pypi
+joblib                    1.5.3                    pypi_0    pypi
+kiwisolver                1.4.7                    pypi_0    pypi
+libexpat                  2.8.2                hd7fb8db_1  
+libffi                    3.4.8                h42d73b9_3  
+libzlib                   1.3.2                h1c6eee0_0  
+littleutils               0.2.4                    pypi_0    pypi
+markupsafe                3.0.3                    pypi_0    pypi
+matplotlib                3.9.4                    pypi_0    pypi
+multidict                 6.7.1                    pypi_0    pypi
+networkx                  3.2.1                    pypi_0    pypi
+numpy                     1.26.4                   pypi_0    pypi
+ogb                       1.3.6                    pypi_0    pypi
+openssl                   3.5.7                hbb43b14_0  
+outdated                  0.2.2                    pypi_0    pypi
+packaging                 26.3                     pypi_0    pypi
+pandas                    2.3.3                    pypi_0    pypi
+pillow                    11.3.0                   pypi_0    pypi
+pip                       26.0.1             pyhc872135_1  
+propcache                 0.4.1                    pypi_0    pypi
+psutil                    7.2.2                    pypi_0    pypi
+pyparsing                 3.3.2                    pypi_0    pypi
+python                    3.9.25               h716150d_1  
+python-dateutil           2.9.0.post0              pypi_0    pypi
+pytz                      2026.3.post1             pypi_0    pypi
+requests                  2.32.5                   pypi_0    pypi
+scikit-learn              1.6.1                    pypi_0    pypi
+scipy                     1.13.1                   pypi_0    pypi
+setuptools                80.9.0           py39haa95532_0  
+six                       1.17.0                   pypi_0    pypi
+sqlite                    3.53.2               hee5a0db_0  
+threadpoolctl             3.6.0                    pypi_0    pypi
+tk                        8.6.15               hf199647_0  
+torch                     1.13.1                   pypi_0    pypi
+torch-geometric           2.6.1                    pypi_0    pypi
+torchaudio                0.13.1                   pypi_0    pypi
+torchvision               0.14.1                   pypi_0    pypi
+tqdm                      4.70.0                   pypi_0    pypi
+typing-extensions         4.16.0                   pypi_0    pypi
+tzdata                    2026.3                   pypi_0    pypi
+ucrt                      10.0.22621.0         haa95532_0  
+urllib3                   2.6.3                    pypi_0    pypi
+vc                        14.3                h2df5915_12  
+vc14_runtime              14.44.35208         h4927774_12  
+vs2015_runtime            14.44.35208         ha6b5a95_12  
+wheel                     0.45.1           py39haa95532_0  
+xz                        5.8.2                h53af0af_0  
+yarl                      1.22.0                   pypi_0    pypi
+zipp                      3.23.1                   pypi_0    pypi
+zlib                      1.3.2                h1c6eee0_0  

@@ -72,7 +72,7 @@ if __name__ == '__main__':
     parser.add_argument('--weight-decay', type=float, default=5e-4, help="weight decay")
     parser.add_argument('--backbone', type=str, default='GCN', help="backbone GNN, [GAT, GCN, GIN]")
     parser.add_argument('--method', type=str,
-                        choices=["bare", 'agem', 'mas', 'joint', 'gss', 'er', 'tfmas', 'ssm', 'dmsg', 'sem'], default="bare",
+                        choices=["bare", 'agem', 'mas', 'joint', 'gss', 'er', 'tfmas', 'tfmas_star', 'ssm', 'dmsg', 'sem'], default="bare",
                         help="baseline continual learning method")
     parser.add_argument('--setting', type=str, default='tfo_gaussian', help="setting [tfo, tfocis, tfo_bb, tfo_gaussian]")
     parser.add_argument('--time_streaming', type=strtobool, default=False, help="whether to load time incremental graph")
@@ -123,6 +123,8 @@ if __name__ == '__main__':
     parser.add_argument('--ergnn_args', type=str2dict, default={'budget': [100,1000], 'd': [0.5], 'sampler': ['CM']},
                         help='sampler options: CM, CM_plus, MF, MF_plus')
     parser.add_argument('--mas_args', type=str2dict, default={'memory_strength': 10000.})
+    parser.add_argument('--tfmas_star_args', type=str2dict, default={},
+                        help="MAS* (Algorithm 1): 'l_th':x;'std_th':y required; optional 'window', 'buffer_size', 'lam', 'passes', 'window_push'")
     parser.add_argument('--gem_args', type=str2dict, default={'memory_strength': 0.5, 'n_memories': 100})
     parser.add_argument('--agem_args', type=str2dict, default={'budget': [100,1000], 'memory_proportion': [1., 2., 3.]})
     parser.add_argument('--er_args', type=str2dict, default={'budget': [100,1000], 'memory_proportion': [1., 2., 3.]})
@@ -178,6 +180,12 @@ if __name__ == '__main__':
         subfolder = subfolder + f'_clsincre'
     if args.time_streaming:
         subfolder = subfolder + f'_timestream{args.n_time_tasks}'
+    if args.method == 'tfmas_star':
+        hp = args.tfmas_star_args
+        subfolder += f"_lth{hp.get('l_th')}_sth{hp.get('std_th')}"
+        for k in ('window', 'buffer_size', 'lam', 'passes', 'window_push'):
+            if k in hp:
+                subfolder += f'_{k}{hp[k]}'
     subfolder += f'_seed{args.seed}'
 
     for _ in range(args.repeats):

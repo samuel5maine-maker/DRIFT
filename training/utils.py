@@ -102,6 +102,9 @@ def set_seed(args=None):
     torch.backends.cudnn.benchmark = False
 
     dgl.random.seed(seed)
+    # DGL's multi-threaded CPU neighbour sampling is not reproducible under dgl.random.seed;
+    # single-threaded sampling is. Torch keeps its own thread pool.
+    dgl.utils.set_num_threads(1)
 
 def remove_illegal_characters(name, replacement='_'):
     # replace any potential illegal characters with 'replacement'
