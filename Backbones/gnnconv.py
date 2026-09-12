@@ -86,7 +86,7 @@ class GINConv(nn.Module):
             as input dimensionality.
         """
         elist = []
-        graph = graph.local_var().to('cuda:{}'.format(feat.get_device()))
+        graph = graph.local_var().to(feat.device)
         feat_src, feat_dst = expand_as_pair(feat)
         graph.srcdata['h'] = feat_src
         graph.update_all(fn.copy_u('h', 'm'), self._reducer('m', 'neigh'))
@@ -125,7 +125,7 @@ class GINConv(nn.Module):
             as input dimensionality.
         """
         elist = []
-        block = block.local_var().to('cuda:{}'.format(feat.get_device()))
+        block = block.local_var().to(feat.device)
         feat_src, feat_dst = expand_as_pair(feat, block)
 
         block.srcdata['h'] = feat_src
@@ -168,7 +168,7 @@ class GCNLayer(nn.Module):
         # (such as the `'h'` ndata below) are automatically popped out
         # when the scope exits.
         elist = []
-        graph = graph.local_var().to('cuda:{}'.format(feat.get_device()))
+        graph = graph.local_var().to(feat.device)
         h = self.linear(feat)
         graph.ndata['h'] = h
         graph.update_all(gcn_msg, gcn_reduce)
@@ -186,7 +186,7 @@ class GCNLayer(nn.Module):
         # (such as the `'h'` ndata below) are automatically popped out
         # when the scope exits.
         elist = []
-        block = block.local_var().to('cuda:{}'.format(feat.get_device()))
+        block = block.local_var().to(feat.device)
         feat_src, feat_dst = expand_as_pair(feat)
         h = self.linear(feat_src)
         block.srcdata['h'] = h
@@ -295,7 +295,7 @@ class GATConv(nn.Module):
             is the number of heads, and :math:`D_{out}` is size of output feature.
         """
         elist = []
-        graph = graph.local_var().to('cuda:{}'.format(feat.get_device()))
+        graph = graph.local_var().to(feat.device)
         h = self.feat_drop(feat)
         feat = self.fc(h).view(-1, self._num_heads, self._out_feats)
         el = (feat * self.attn_l1).sum(dim=-1).unsqueeze(-1) 
@@ -321,7 +321,7 @@ class GATConv(nn.Module):
         # (such as the `'h'` ndata below) are automatically popped out
         # when the scope exits.
         elist = []
-        block = block.local_var().to('cuda:{}'.format(feat.get_device()))
+        block = block.local_var().to(feat.device)
         h_src = h_dst = self.feat_drop(feat)
         feat_src = self.fc(h_src).view(
             -1, self._num_heads, self._out_feats)

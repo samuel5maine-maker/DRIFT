@@ -7,7 +7,11 @@ import torch.nn.functional as F
 from sklearn.model_selection import train_test_split
 from ogb.nodeproppred import DglNodePropPredDataset
 import dgl
-from dgl.data import CoraFullDataset, RedditDataset, AmazonCoBuyComputerDataset, RomanEmpireDataset
+from dgl.data import CoraFullDataset, RedditDataset, AmazonCoBuyComputerDataset
+try:
+    from dgl.data import RomanEmpireDataset  # added in DGL 1.1
+except ImportError:
+    RomanEmpireDataset = None
 import copy
 import collections
 import pandas as pd
