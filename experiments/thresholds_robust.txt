@@ -1,0 +1,7 @@
+# frozen (2.858, 0.3732) and neighbours: grid neighbours below, p70 beyond the grid corner
+2.858 0.3732
+1.624 0.3732
+2.858 0.2164
+5.112 0.3732
+2.858 0.9741
+5.112 0.9741

@@ -1,0 +1,2 @@
+# selected in T3 by the pre-registered rule: max % hard-control task segments with >=1 consolidation
+2.858 0.3732

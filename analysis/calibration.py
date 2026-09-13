@@ -11,6 +11,7 @@ is the first step with a buffer, win_mean < l_th and win_std < std_th.
 """
 import math
 import os
+import sys
 
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
@@ -60,7 +61,8 @@ def main():
         for b in task_boundaries(stream):
             ax.axvline(b, color=MUTED, lw=0.4, alpha=0.35, zorder=0)
         ax.set_title(REGIME_LABEL.get(g, g), loc='left')
-        ax.set_ylabel('loss')
+        ax.set_ylabel('loss (symlog)')
+        ax.set_yscale('symlog', linthresh=1.0)
     axes[0].legend(loc='upper right', ncol=3)
     axes[-1].set_xlabel('stream step (thin verticals: ground-truth dominant-task changes)')
     fig.suptitle('Detector-off MAS*: what the plateau detector would see (window = L(X,Y)+L(X_B,Y_B))', x=0.01,
@@ -136,6 +138,7 @@ def main():
     lines += ['', '![loss scale](calibration/t1_loss_scale.png)', '', '![first fire](calibration/t2_first_fire_map.png)']
     with open(os.path.join(ROOT, 'analysis', 'calibration_t1t2.md'), 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines) + '\n')
+    sys.stdout.reconfigure(encoding='utf-8')
     print('\n'.join(lines))
 
 
