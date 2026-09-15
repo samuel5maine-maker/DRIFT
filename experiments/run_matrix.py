@@ -139,6 +139,27 @@ def plan_jobs(plan, thresholds=None):
         methods = [(m, None) for m in ('bare', 'er', 'agem', 'tfmas', 'dmsg', 'er_cbrs')]
         return [job(r, m, s, dataset=d, method_args=hp) for d, r in (('CoraFull-CL', 'sigma20'), ('Arxiv-CL', 'sigma60'))
                 for m, hp in methods for s in (1, 2, 3)]
+    if plan == 'eval_t2':
+        """All new methods at seeds 1-3 with the seed-0 selections, plus the ablations the spec requires."""
+        import json
+        sel = json.load(open(os.path.join(OUT_ROOT, 'experiments', 'selected_hparams.json')))
+        jobs = []
+        for dataset, regime in (('CoraFull-CL', 'sigma20'), ('Arxiv-CL', 'sigma60')):
+            hp = sel[dataset]
+            der, derpp, lwf, clser = hp['der'], hp['derpp'], hp['lwf_online'], hp['clser']
+            # spec §5.7 names alpha for the label term and beta for the stored logits; DER++'s paper naming is the
+            # other way round, so the selected DER++ weights are mapped across here
+            combo = {'alpha': derpp['beta'], 'beta': derpp['alpha'], 'gamma': clser['reg_weight'],
+                     'ema_alpha': clser['stable_alpha'], 'ema_update_freq': clser['stable_update_freq']}
+            arms = [('der', der), ('derpp', derpp), ('lwf_online', lwf), ('clser', clser),
+                    ('clser', dict(clser, reg_weight=0.0)),            # EMA without consistency (spec §5.5 ablation)
+                    ('dercls', combo),
+                    ('dercls', dict(combo, gamma=0.0)),                # beta-only  (spec §5.7 ablation)
+                    ('dercls', dict(combo, beta=0.0))]                 # gamma-only (spec §5.7 ablation)
+            for method, args_ in arms:
+                jobs += [job(regime, method, s_, dataset=dataset, method_args=args_) for s_ in (1, 2, 3)]
+            jobs += [job(regime, 'pdgnn', s_, dataset=dataset, backbone='SGC') for s_ in (1, 2, 3)]
+        return jobs
     if plan in ('tune_cora', 'tune_arxiv'):
         dataset, regime, sigma = ('CoraFull-CL', 'sigma20', 20) if plan == 'tune_cora' else ('Arxiv-CL', 'sigma60', 60)
         grid = []
