@@ -20,7 +20,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from drift_args import main_args  # noqa: E402
 from training.utils import result_name  # noqa: E402
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))     # code that runs (may be a frozen worktree)
+# data, results, telemetry and logs live here; set DRIFT_OUT_ROOT to the main checkout when running from a worktree,
+# so code edits in the main checkout cannot affect jobs that are already queued
+OUT_ROOT = os.path.abspath(os.environ.get('DRIFT_OUT_ROOT', ROOT))
 PY = sys.executable
 
 REGIMES = {
@@ -34,13 +37,14 @@ REGIMES = {
 }
 
 
-DATASET_FLAGS = {'Arxiv-CL': ['--ori_data_path', os.path.join(ROOT, 'data', 'raw')]}
+DATASET_FLAGS = {'Arxiv-CL': ['--ori_data_path', os.path.join(OUT_ROOT, 'data', 'raw')]}
 
 
 def job(regime, method, seed, dataset='CoraFull-CL', backbone='GCN', star_args=None, method_args=None):
     """One main.py invocation. method_args (or star_args, for tfmas_star) become --{method}_args."""
     method_args = star_args if star_args is not None else method_args
-    cmd = ['--dataset', dataset, '--backbone', backbone, '--method', method, '--seed', str(seed), '--cuda', 'no']
+    cmd = ['--dataset', dataset, '--backbone', backbone, '--method', method, '--seed', str(seed), '--cuda', 'no',
+           '--data_path', os.path.join(OUT_ROOT, 'data')]
     cmd += DATASET_FLAGS.get(dataset, [])
     cmd += REGIMES[regime]
     if method_args:
@@ -54,7 +58,7 @@ def job(regime, method, seed, dataset='CoraFull-CL', backbone='GCN', star_args=N
 
 def result_prefix(j):
     args = main_args(j['args'])
-    return os.path.join(ROOT, args.result_path, result_name(args))
+    return os.path.join(OUT_ROOT, args.result_path, result_name(args))
 
 
 def done(j):
@@ -66,7 +70,7 @@ def with_results_dir(jobs, results_dir):
     if results_dir == 'results':
         return jobs
     for j in jobs:
-        j['args'] = j['args'] + ['--result_path', results_dir]
+        j['args'] = j['args'] + ['--result_path', os.path.join(OUT_ROOT, results_dir)]
     return jobs
 
 
@@ -76,10 +80,10 @@ def run(j, threads):
     results_dir = os.path.basename(os.path.normpath(main_args(j['args']).result_path))
     suffix = '' if results_dir == 'results' else results_dir[len('results'):] if results_dir.startswith('results') \
         else '_' + results_dir
-    log_dir = os.path.join(ROOT, 'experiments', 'logs' + suffix)
+    log_dir = os.path.join(OUT_ROOT, 'experiments', 'logs' + suffix)
     os.makedirs(log_dir, exist_ok=True)
     # telemetry and logs follow the results directory, so a new protocol never overwrites an earlier study's files
-    env = dict(os.environ, MAS_TELEMETRY_DIR=os.path.join(ROOT, 'telemetry' + suffix), OMP_NUM_THREADS=str(threads),
+    env = dict(os.environ, MAS_TELEMETRY_DIR=os.path.join(OUT_ROOT, 'telemetry' + suffix), OMP_NUM_THREADS=str(threads),
                PYTHONWARNINGS='ignore')
     t0 = time.time()
     with open(os.path.join(log_dir, j['name'] + '.log'), 'w') as log:
@@ -88,6 +92,26 @@ def run(j, threads):
     dt = time.time() - t0
     print(f'{status:>12}  {dt:7.0f}s  {j["name"]}', flush=True)
     return j['name'], status, dt
+
+
+def clser_grid(sigma):
+    """
+    CLS-ER configurations (spec §5.5). With update probability r and decay a, an EMA averages over ~1/(r(1-a)) steps.
+    Paper Table S4 MNIST-360 (general CL) and the official repo defaults are included as references; the stream-scaled
+    configs set the plastic window to sigma and the stable window to k*sigma, k in {3, 10}.
+    """
+    def decay(window, r):
+        return round(1 - 1 / (window * r), 5)
+    cfgs = [('clser', {'reg_weight': 1.25, 'stable_alpha': 0.99, 'plastic_alpha': 0.99,
+                       'stable_update_freq': 0.9, 'plastic_update_freq': 1.0}),                 # paper, MNIST-360
+            ('clser', {'reg_weight': 0.1, 'stable_alpha': 0.999, 'plastic_alpha': 0.999,
+                       'stable_update_freq': 0.7, 'plastic_update_freq': 0.9})]                 # repo defaults
+    for reg in (0.1, 1.25):
+        for k in (3, 10):
+            cfgs.append(('clser', {'reg_weight': reg, 'stable_alpha': decay(k * sigma, 0.9),
+                                   'plastic_alpha': decay(sigma, 1.0), 'stable_update_freq': 0.9,
+                                   'plastic_update_freq': 1.0}))
+    return cfgs
 
 
 def plan_jobs(plan, thresholds=None):
@@ -115,6 +139,15 @@ def plan_jobs(plan, thresholds=None):
         methods = [(m, None) for m in ('bare', 'er', 'agem', 'tfmas', 'dmsg', 'er_cbrs')]
         return [job(r, m, s, dataset=d, method_args=hp) for d, r in (('CoraFull-CL', 'sigma20'), ('Arxiv-CL', 'sigma60'))
                 for m, hp in methods for s in (1, 2, 3)]
+    if plan in ('tune_cora', 'tune_arxiv'):
+        dataset, regime, sigma = ('CoraFull-CL', 'sigma20', 20) if plan == 'tune_cora' else ('Arxiv-CL', 'sigma60', 60)
+        grid = []
+        grid += [('der', {'alpha': a}) for a in (0.5, 1.0)]                                    # DER paper Table 10
+        grid += [('derpp', {'alpha': a, 'beta': b}) for a in (0.2, 0.5) for b in (0.5, 1.0)]  # DER paper Table 10
+        grid += [('lwf_online', {'lambda_dist': l, 'T': t, 'update_every': u})               # spec §5.4 / OCGL
+                 for l in (0.1, 1.0, 10.0) for t in (0.2, 2.0, 20.0) for u in (1, 10, 100)]
+        grid += clser_grid(sigma)
+        return [job(regime, m, 0, dataset=dataset, method_args=hp) for m, hp in grid]
     if plan == 'gate0_arxiv_timing':
         return [job('sigma60', 'er', 1, dataset='Arxiv-CL')]
     if plan == 'robust':
