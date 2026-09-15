@@ -183,3 +183,58 @@ Published targets [paper, Table 2, Gaussian mixing, A_AUC / AF_s]:
 2. **§7 AF_s = peak − final.** The code and tables use final − peak (see Q5).
 3. **Q3's premise.** DRIFT's DMSG has no rebuild interval (see Q3).
 4. **§2 datasets.** RomanEmpire-CL cannot run on torch 1.13 / DGL < 2 (see §2).
+
+---
+
+## Decision after Gate 0
+
+Sam, 2026-09-15: **proceed with the new methods.**
+- Every baseline used for comparison is re-run in this environment under a fixed protocol (next section).
+- Published numbers appear with `source = paper` and are not directly comparable.
+
+## Reproducibility protocol "t2" (all new-baseline runs)
+
+[run] Results depend on the OpenMP thread count, and on oversubscription.
+- DRIFT's ER, CoraFull-CL σ=20, seed 1 gave A_AUC 34.6 (Gate 0, 8 threads), 33.5 (8 threads, contended), 32.8 (4 threads), 32.7 (2 threads) and 32.7 (1 thread).
+- At a fixed `OMP_NUM_THREADS=2`, two concurrent runs gave bit-identical accuracy matrices.
+
+The protocol:
+- All new-baseline runs use `experiments/run_matrix.py --threads 2 --results results_t2`, with telemetry in `telemetry_t2/`.
+- DGL sampling is pinned to one thread in `set_seed`.
+- Batches run from a frozen git worktree (`DRIFT_OUT_ROOT`), so edits in the main checkout cannot reach queued jobs. Four early jobs crashed when `pipeline.py` and `telemetry.py` were edited mid-batch; they are re-run.
+- **Implication for Gate 0 and the MAS* study:** those runs mixed thread counts (8 for the first job per regime, 2 for the rest). Their seed-to-seed spread includes ~1–2 A_AUC points of thread variation.
+
+## §11 report-back
+
+### 3. Where a source paper and its reference implementation disagree, or the port departs from both
+
+| Method | Source says | Reference code does | Followed | Why |
+|---|---|---|---|---|
+| Reservoir (Algorithm R) | keep item t with probability k/(t+1) (Vitter 1985) | Mammoth `utils/buffer.py`: `randint(0, num_seen + 1)` (matches Vitter). DRIFT `er_model.py` and OCGL `ReservoirSamplingBuffer`: `randint(0, n_seen + i)`, i.e. k/t, an off-by-one | Vitter/Mammoth in the new methods; DRIFT's ER unchanged | new methods follow the reference algorithm; existing baselines stay as published |
+| CBRS (§5.1) | Algorithm 1 (population) **plus** weighted replay and the loss a·L_s + (1−a)·L_r with a = 1/n_c (Algorithm 2) | no official code | population only by default; `'replay':'weighted'` and `'loss':'convex'` are options | the spec describes population only, and keeping DRIFT's ER step isolates the memory policy |
+| DER / DER++ | store logits at insertion | Mammoth stores `outputs.data` from the (augmented) training forward, before the step | pre-step logits computed **on the isolated node**; `'insert_logits':'stream'` stores Mammoth's version | DRIFT replays isolated nodes (Q1); stream logits carry a sampled neighbourhood the replay input never has |
+| CLS-ER | Algorithm 1: target = plastic if σ(Z_P) > σ(Z_S), else stable; no warm-up ramp mentioned | `clser.py`: stable if stable_prob > plastic_prob, else plastic; α = min(1 − 1/(step+1), α_max) | code | reference implementation; the only difference is how ties break |
+| CLS-ER inference | "For inference, we use the stable model" | no `forward` override in `clser.py` | stable model; working/plastic curves logged to `alt_model_accuracy.csv` | paper states it explicitly |
+| PDGNN | KDD 2024: coverage-maximisation sampling for the memory | OCGL online port: ER over SGC features, reservoir | OCGL | the spec points to OCGL's online adaptation |
+| PDGNN SGC normalisation | — | OCGL normalises by **block** degrees and also predicts on blocks | full-graph degrees on training blocks | DRIFT evaluates on the full graph; with block degrees, train and test embeddings would be on different scales. With a full-neighbourhood sampler the two now agree exactly (unit test) |
+| LwF-online | — | OCGL re-initialises the LwF net with `kaiming_normal_init` | DRIFT's default initialisation | all methods start from identical backbone weights |
+
+### 4. Methods that cannot run under §2's constraints unchanged
+
+- **PDGNN** replaces the 2-layer GCN with SGC(k=2) propagation + MLP(256). This is inherent to the method (OCGL asserts `backbone == 'SGC'`). It is reported with an `[SGC]` tag. Its memory stores d_data-dimensional embeddings: 8,710 dims on CoraFull (~3.5 MB for 100 slots) and 128 on Arxiv.
+- **CLS-ER** keeps two extra full model copies. **DER, DER++ and the combination** store n_cls logits per slot. The combination also keeps one EMA copy. All of this appears in `analysis/baselines/memory_accounting.csv`.
+- **DRIFT's own replay baselines are not memory-equal either.** A-GEM holds two gradient-sized vectors per step. DMSG has an adversarial discriminator, which is counted as extra params.
+- **RomanEmpire-CL** cannot run in this environment (DGL < 2.0; see §2).
+
+### 5. Spec claims contradicted by code or measurement (additions)
+
+5. **§5.1 occupancy table.**
+
+   | | spec | exact (hypergeometric) | simulated, 300 trials |
+   |---|---|---|---|
+   | classes with 0 slots | 16.7 | **24.18** | 23.7 |
+   | classes with ≤ 1 slot | 40.6 | **43.72** | 43.7 |
+   | latent tasks with 0 slots | 1.9 | **4.37** | 4.2 |
+
+   This is for Algorithm R with k=100 over CoraFull's real class sizes (all 19,793 nodes). The DRIFT train-split stream gives 24.2 / 43.6 / 4.3, and CBRS gives 0 / 40.0 / 0. The spec's percentages (23.8%, 57.9%) are consistent with its own counts, so the spec simulated a different class-size distribution. The real imbalance is worse than stated. `tests/test_replay_buffers.py` now checks against the exact expectation.
+6. **§5.5 "λ = 0.999 window as % of stream".** With the real stream lengths (Q2), CoraFull is ~84%, not ~50%. CLS-ER's own paper uses α = 0.99 for its general-CL benchmark (MNIST-360), not 0.999. The tuning grid covers both, plus stream-scaled decays (`clser_grid` in `experiments/run_matrix.py`).
