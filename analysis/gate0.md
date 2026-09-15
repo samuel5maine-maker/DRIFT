@@ -15,8 +15,8 @@ Seeds 1–3 in the `drift-cpu` env (CPU, DGL 1.1.2). Criterion: |Δ| ≤ 2·SE o
 
 | method | n | A_AUC ours | A_AUC paper | Δ | z | verdict | AF_s ours | AF_s paper | Δ | z | verdict |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| Bare | 0 | – | 18.5 ± 1.5 | | | not run | – | -65.4 ± 3.1 | | | |
-| ER | 0 | – | 34.9 ± 0.8 | | | not run | – | -37.3 ± 2.8 | | | |
-| A-GEM | 0 | – | 34.1 ± 1.4 | | | not run | – | -48.6 ± 4.4 | | | |
-| MAS* (DRIFT tfmas) | 0 | – | 38.4 ± 2.1 | | | not run | – | -22.2 ± 1.8 | | | |
+| Bare | 3 | 22.1 ± 1.1 | 18.5 ± 1.5 | +3.6 | +3.4 | ABOVE paper | -61.5 ± 1.2 | -65.4 ± 3.1 | +3.9 | +2.0 | ABOVE paper |
+| ER | 3 | 35.6 ± 1.3 | 34.9 ± 0.8 | +0.7 | +0.8 | within noise | -37.4 ± 2.1 | -37.3 ± 2.8 | -0.1 | -0.1 | within noise |
+| A-GEM | 3 | 35.0 ± 0.8 | 34.1 ± 1.4 | +0.9 | +1.0 | within noise | -48.9 ± 3.3 | -48.6 ± 4.4 | -0.3 | -0.1 | within noise |
+| MAS* (DRIFT tfmas) | 3 | 43.5 ± 1.6 | 38.4 ± 2.1 | +5.1 | +3.4 | ABOVE paper | -16.6 ± 6.9 | -22.2 ± 1.8 | +5.6 | +1.4 | within noise |
 

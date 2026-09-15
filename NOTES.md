@@ -114,7 +114,7 @@ It depends on the regime.
 
 ## §4 Gate 0
 
-**Status: FAILED on CoraFull-CL. Stopped here per spec §4. No new method has been implemented.**
+**Status: partial. 12 of 16 cells reproduce; the 4 that do not (Bare on both datasets, ER on CoraFull, MAS* on Arxiv) are all above the paper. Stopped before implementing new methods, per spec §4, pending a decision.**
 
 [run] Seeds 1–3, `drift-cpu` env. Metrics come from `results/*.pkl` via `analysis/gate0.py`, which writes `analysis/gate0.md`. The criterion is |Δ| ≤ 2·SE with SE = √(sd²/n + sd_paper²/3).
 
@@ -133,9 +133,31 @@ It depends on the regime.
 - **Likely cause** [inferred]: the environment. The published numbers presumably came from a GPU run with a different DGL version and different neighbour-sampling RNG. Here, DGL 1.1.2 on CPU is used with sampling pinned to one thread. A roughly uniform upward offset would fit Bare and A-GEM, but ER's +6.9 is more than twice Bare's.
 - **Cannot be resolved without the original environment.** The DGL version behind the published tables is unknown. Note that `dataset/utils.py` imports `RomanEmpireDataset`, which is absent from DGL 0.9.1 and 1.1.2, so the repo as published needs a newer DGL than either, whereas the local `drift` env had `dgl-cu113 0.9.1`.
 
-**Arxiv-CL, Gaussian σ=60: not yet run.** An ER seed-1 timing run was started to measure CPU cost; the ogbn-arxiv download was in progress when Gate 0 stopped.
+**Arxiv-CL, Gaussian σ=60** [run], seeds 1–3, ~5–8 min per run on CPU:
 
-**MAS* discrepancy (38.4 vs 23.1): unanswered.** This needs the Arxiv-CL `tfmas` runs (plan `gate0_arxiv` in `experiments/run_matrix.py`).
+| method | A_AUC ours | A_AUC paper | Δ (z) | AF_s ours | AF_s paper | Δ (z) |
+|---|---|---|---|---|---|---|
+| Bare | 22.1 ± 1.1 | 18.5 ± 1.5 | **+3.6 (+3.4)** | −61.5 ± 1.2 | −65.4 ± 3.1 | +3.9 (+2.0) |
+| ER | 35.6 ± 1.3 | 34.9 ± 0.8 | +0.7 (+0.8) | −37.4 ± 2.1 | −37.3 ± 2.8 | −0.1 |
+| A-GEM | 35.0 ± 0.8 | 34.1 ± 1.4 | +0.9 (+1.0) | −48.9 ± 3.3 | −48.6 ± 4.4 | −0.3 |
+| MAS* (tfmas) | 43.5 ± 1.6 | 38.4 ± 2.1 | **+5.1 (+3.4)** | −16.6 ± 6.9 | −22.2 ± 1.8 | +5.6 (+1.4) |
+
+**Where Gate 0 stands.** ER and A-GEM reproduce on Arxiv-CL. On CoraFull-CL, A-GEM and MAS* reproduce. Four cells fall outside noise, and all four are **above** the paper:
+- **Bare**, on both datasets: +2.9 and +3.6.
+- **ER**, on CoraFull: +6.9.
+- **MAS***, on Arxiv: +5.1.
+
+No cell comes out below. That points to something systematic about this environment rather than a broken method [inferred].
+
+**MAS* discrepancy: the code produces 43.5 ± 1.6** (per seed 41.9 / 45.0 / 43.6).
+- **Tables 2 and 10:** 38.4 ± 2.1. The code is +5.1 above this.
+- **§5.4 prose:** 23.1. The code is +20.4 above this.
+
+The code is much closer to the tables and gives no support for 23.1 under Gaussian mixing at σ=60, B=10. For the question to the authors: "the code produces 43.5; tables say 38.4; prose says 23.1."
+
+Two related points:
+- The same §5.4 sentence gives Bare 22.6. The code gives **22.1 ± 1.1**, matching the prose, while Table 2 says 18.5 ± 1.5. One possibility is that the prose was written from a different run (another σ or configuration) than the tables [inferred]. It would be worth asking which configuration the §5.4 numbers came from.
+- MAS* and Bare accuracy matrices differ on every Arxiv seed, so DRIFT's MAS* does consolidate on Arxiv. The bit-identical MAS* = Bare result was specific to CoraFull under global mixing (`analysis/report.md`).
 
 Published targets [paper, Table 2, Gaussian mixing, A_AUC / AF_s]:
 
