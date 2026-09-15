@@ -14,4 +14,7 @@ def get_model(dataset, args):
             model = GCN(args)
     elif args.backbone == 'GIN':
         model = GIN(args)
+    elif args.backbone == 'SGC':          # PDGNN's backbone (OCGL): SGC propagation + MLP
+        from .sgc import SGC_MLP
+        model = SGC_MLP(args)
     return model

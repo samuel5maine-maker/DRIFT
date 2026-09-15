@@ -70,7 +70,7 @@ if __name__ == '__main__':
     parser.add_argument("--epochs", type=int, default=1, help="number of training epochs, default = 1")
     parser.add_argument("--lr", type=float, default=0.005, help="learning rate")
     parser.add_argument('--weight-decay', type=float, default=5e-4, help="weight decay")
-    parser.add_argument('--backbone', type=str, default='GCN', help="backbone GNN, [GAT, GCN, GIN]")
+    parser.add_argument('--backbone', type=str, default='GCN', help="backbone GNN, [GAT, GCN, GIN, SGC]")
     parser.add_argument('--method', type=str,
                         choices=["bare", 'agem', 'mas', 'joint', 'gss', 'er', 'tfmas', 'tfmas_star', 'ssm', 'dmsg', 'sem',
                                  'er_cbrs', 'der', 'derpp', 'pdgnn', 'lwf_online', 'clser', 'dercls'], default="bare",
@@ -121,6 +121,7 @@ if __name__ == '__main__':
                                  'attn_drop': .6, 'negative_slope': 0.2, 'residual': False})
     parser.add_argument('--GCN-args', default={'h_dims': [256], 'dropout': 0.0, 'batch_norm': False})
     parser.add_argument('--GIN-args', default={'h_dims': [256], 'dropout': 0.0})
+    parser.add_argument('--SGC-args', default={'h_dims': [256], 'k': 2}, help='SGC backbone (PDGNN): MLP hidden dims, propagation hops')
     parser.add_argument('--ergnn_args', type=str2dict, default={'budget': [100,1000], 'd': [0.5], 'sampler': ['CM']},
                         help='sampler options: CM, CM_plus, MF, MF_plus')
     parser.add_argument('--mas_args', type=str2dict, default={'memory_strength': 10000.})

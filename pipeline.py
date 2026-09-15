@@ -574,6 +574,8 @@ def pipeline_tfo(dataset, continuum, tasks_te, args):
     current_task = 0
     time_start = time.time()
     tel_hook = EvalTelemetry(args)
+    # methods that infer with a model other than the trained backbone (CLS-ER's stable EMA) expose eval_model()
+    eval_net = life_model_ins.eval_model() if hasattr(life_model_ins, 'eval_model') else model
 
     for (i, (subgraph, t, ids_batch)) in enumerate(continuum):
         # only training on data of one task each time
@@ -581,9 +583,9 @@ def pipeline_tfo(dataset, continuum, tasks_te, args):
             break
         if(((i % args.log_every) == 0) or (t != current_task)):
         # if t != current_task: # eval when task changes
-            res_per_t, avg_acc, current_res_per_t, current_avg_acc = eval(model, continuum, tasks_te, current_task, args)
+            res_per_t, avg_acc, current_res_per_t, current_avg_acc = eval(eval_net, continuum, tasks_te, current_task, args)
             result_list.append(res_per_t)
-            tel_hook.on_eval(i, res_per_t, life_model_ins)
+            tel_hook.on_eval(i, res_per_t, life_model_ins, lambda m: eval(m, continuum, tasks_te, current_task, args))
             avg_acc_list.append(avg_acc)
             current_result_list.append(current_res_per_t)
             current_avg_acc_list.append(current_avg_acc)
@@ -602,9 +604,10 @@ def pipeline_tfo(dataset, continuum, tasks_te, args):
             # Train classification model
             life_model_ins.observe(args, subgraph, features, labels, ids_batch)
     
-    res_per_t, avg_acc, current_res_per_t, current_avg_acc = eval(model, continuum, tasks_te, args.n_tasks-1, args) # test after training
+    res_per_t, avg_acc, current_res_per_t, current_avg_acc = eval(eval_net, continuum, tasks_te, args.n_tasks-1, args) # test after training
     result_list.append(res_per_t)
-    tel_hook.on_final(i + 1, model, continuum.graphs, tasks_te, life_model_ins, res_per_t, masked=False)
+    tel_hook.on_final(i + 1, eval_net, continuum.graphs, tasks_te, life_model_ins, res_per_t, masked=False,
+                      eval_fn=lambda m: eval(m, continuum, tasks_te, args.n_tasks-1, args))
     avg_acc_list.append(avg_acc)
     current_result_list.append(current_res_per_t)
     current_avg_acc_list.append(current_avg_acc)
@@ -645,6 +648,8 @@ def pipeline_tfocis(dataset, continuum, tasks_te, args):
     current_task = 0
     time_start = time.time()
     tel_hook = EvalTelemetry(args)
+    # methods that infer with a model other than the trained backbone (CLS-ER's stable EMA) expose eval_model()
+    eval_net = life_model_ins.eval_model() if hasattr(life_model_ins, 'eval_model') else model
 
     for (i, (subgraph, t, ids_batch)) in enumerate(continuum):
         # only training on data of one task each time
@@ -652,9 +657,9 @@ def pipeline_tfocis(dataset, continuum, tasks_te, args):
             break
         if(((i % args.log_every) == 0) or (t != current_task)):
         # if t != current_task: # eval when task changes
-            res_per_t, avg_acc, current_res_per_t, current_avg_acc = eval(model, continuum, tasks_te, current_task, args)
+            res_per_t, avg_acc, current_res_per_t, current_avg_acc = eval(eval_net, continuum, tasks_te, current_task, args)
             result_list.append(res_per_t)
-            tel_hook.on_eval(i, res_per_t, life_model_ins)
+            tel_hook.on_eval(i, res_per_t, life_model_ins, lambda m: eval(m, continuum, tasks_te, current_task, args))
             avg_acc_list.append(avg_acc)
             current_result_list.append(current_res_per_t)
             current_avg_acc_list.append(current_avg_acc)
@@ -673,9 +678,10 @@ def pipeline_tfocis(dataset, continuum, tasks_te, args):
             # Train classification model
             life_model_ins.observe_cis(args, subgraph, features, labels, ids_batch)
     
-    res_per_t, avg_acc, current_res_per_t, current_avg_acc = eval(model, continuum, tasks_te, args.n_tasks-1, args) # test after training
+    res_per_t, avg_acc, current_res_per_t, current_avg_acc = eval(eval_net, continuum, tasks_te, args.n_tasks-1, args) # test after training
     result_list.append(res_per_t)
-    tel_hook.on_final(i + 1, model, continuum.graphs, tasks_te, life_model_ins, res_per_t, masked=True)
+    tel_hook.on_final(i + 1, eval_net, continuum.graphs, tasks_te, life_model_ins, res_per_t, masked=True,
+                      eval_fn=lambda m: eval(m, continuum, tasks_te, args.n_tasks-1, args))
     avg_acc_list.append(avg_acc)
     current_result_list.append(current_res_per_t)
     current_avg_acc_list.append(current_avg_acc)
@@ -720,6 +726,8 @@ def pipeline_tfobb(dataset, data, tasks_te, args):
     current_task = 0
     time_start = time.time()
     tel_hook = EvalTelemetry(args)
+    # methods that infer with a model other than the trained backbone (CLS-ER's stable EMA) expose eval_model()
+    eval_net = life_model_ins.eval_model() if hasattr(life_model_ins, 'eval_model') else model
 
     bnc = 0
     for t, subgraph in enumerate(subgraphs):
@@ -737,9 +745,9 @@ def pipeline_tfobb(dataset, data, tasks_te, args):
 
             # Evaluation schedule (same logic as other pipelines, but using `subgraphs`)
             if ((bnc % args.log_every) == 0) or (t != current_task):
-                res_per_t, avg_acc, current_res_per_t, current_avg_acc = eval(model, subgraphs, tasks_te, current_task, args)
+                res_per_t, avg_acc, current_res_per_t, current_avg_acc = eval(eval_net, subgraphs, tasks_te, current_task, args)
                 result_list.append(res_per_t)
-                tel_hook.on_eval(bnc, res_per_t, life_model_ins)
+                tel_hook.on_eval(bnc, res_per_t, life_model_ins, lambda m: eval(m, subgraphs, tasks_te, current_task, args))
                 avg_acc_list.append(avg_acc)
                 current_result_list.append(current_res_per_t)
                 current_avg_acc_list.append(current_avg_acc)
@@ -760,9 +768,10 @@ def pipeline_tfobb(dataset, data, tasks_te, args):
 
             bnc += 1
 
-    res_per_t, avg_acc, current_res_per_t, current_avg_acc = eval(model, subgraphs, tasks_te, args.n_tasks-1, args) # test after training
+    res_per_t, avg_acc, current_res_per_t, current_avg_acc = eval(eval_net, subgraphs, tasks_te, args.n_tasks-1, args) # test after training
     result_list.append(res_per_t)
-    tel_hook.on_final(bnc, model, subgraphs, tasks_te, life_model_ins, res_per_t, masked=True)
+    tel_hook.on_final(bnc, eval_net, subgraphs, tasks_te, life_model_ins, res_per_t, masked=True,
+                      eval_fn=lambda m: eval(m, subgraphs, tasks_te, args.n_tasks-1, args))
     avg_acc_list.append(avg_acc)
     current_result_list.append(current_res_per_t)
     current_avg_acc_list.append(current_avg_acc)
@@ -912,14 +921,16 @@ def pipeline_gaussian(dataset, data, tasks_te, args):
     current_task = 0  
     time_start = time.time()
     tel_hook = EvalTelemetry(args)
+    # methods that infer with a model other than the trained backbone (CLS-ER's stable EMA) expose eval_model()
+    eval_net = life_model_ins.eval_model() if hasattr(life_model_ins, 'eval_model') else model
 
     for b, (batch_orig_ids, _, weights) in enumerate(stream):
         if b % args.log_every == 0:
             res_per_t, avg_acc, cur_res, cur_acc = eval(
-                model, eval_subgraphs, tasks_te, current_task, args
+                eval_net, eval_subgraphs, tasks_te, current_task, args
             )
             result_list.append(res_per_t)
-            tel_hook.on_eval(b, res_per_t, life_model_ins)
+            tel_hook.on_eval(b, res_per_t, life_model_ins, lambda m: eval(m, eval_subgraphs, tasks_te, current_task, args))
             avg_acc_list.append(avg_acc)
             current_result_list.append(cur_res)
             current_avg_acc_list.append(cur_acc)
@@ -937,10 +948,11 @@ def pipeline_gaussian(dataset, data, tasks_te, args):
             life_model_ins.observe_cis(args, merged_subgraph, features, labels, local_ids)
 
     res_per_t, avg_acc, cur_res, cur_acc = eval(
-        model, eval_subgraphs, tasks_te, args.n_tasks - 1, args
+        eval_net, eval_subgraphs, tasks_te, args.n_tasks - 1, args
     )
     result_list.append(res_per_t)
-    tel_hook.on_final(len(stream), model, eval_subgraphs, tasks_te, life_model_ins, res_per_t, masked=True)
+    tel_hook.on_final(len(stream), eval_net, eval_subgraphs, tasks_te, life_model_ins, res_per_t, masked=True,
+                      eval_fn=lambda m: eval(m, eval_subgraphs, tasks_te, args.n_tasks - 1, args))
     avg_acc_list.append(avg_acc)
     current_result_list.append(cur_res)
     current_avg_acc_list.append(cur_acc)

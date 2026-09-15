@@ -72,7 +72,8 @@ def make_telemetry(args, run_name):
 def buffer_labels(life_model):
     """Labels currently held in a method's replay memory, or None if the method has no memory."""
     if hasattr(life_model, 'buffer_labels'):
-        return [int(y) for y in life_model.buffer_labels()]
+        labels = life_model.buffer_labels()
+        return None if labels is None else [int(y) for y in labels]
     aux = getattr(life_model, 'aux_labels', None)          # DRIFT's ER / A-GEM / DMSG keep labels on the aux graph
     if aux is not None:
         return [int(y) for y in aux.view(-1).tolist()]
@@ -130,17 +131,31 @@ class EvalTelemetry:
                                               'slot_count': sum(counts[t * per_cls:(t + 1) * per_cls])})
         return counts
 
-    def on_eval(self, step, res_per_t, life_model):
+    def _alt_curves(self, step, life_model, eval_fn):
+        """Accuracy of a method's other models (e.g. CLS-ER working/plastic) at the same evaluation point."""
+        if eval_fn is None or not hasattr(life_model, 'alt_eval_models'):
+            return
+        for name, net in life_model.alt_eval_models().items():
+            res, avg, _, _ = eval_fn(net)
+            for k, acc in enumerate(res):
+                self.tel.log('alt_model_accuracy', {'step': step, 'method': self.method, 'seed': self.args.seed,
+                                                    'model': name, 'task': k, 'accuracy': float(acc)})
+            self.tel.log('alt_model_accuracy', {'step': step, 'method': self.method, 'seed': self.args.seed,
+                                                'model': name, 'task': -1, 'accuracy': float(avg)})
+
+    def on_eval(self, step, res_per_t, life_model, eval_fn=None):
         if self.tel is None:
             return
         for k, acc in enumerate(res_per_t):
             self.tel.log('per_task_accuracy', {'step': step, 'method': self.method, 'seed': self.args.seed,
                                                'task': k, 'accuracy': float(acc)})
         self._occupancy(step, life_model)
+        self._alt_curves(step, life_model, eval_fn)
 
-    def on_final(self, step, model, subgraphs, tasks_te, life_model, res_per_t, masked=True):
+    def on_final(self, step, model, subgraphs, tasks_te, life_model, res_per_t, masked=True, eval_fn=None):
         if self.tel is None:
             return
+        self._alt_curves(step, life_model, eval_fn)
         for k, acc in enumerate(res_per_t):
             self.tel.log('per_task_accuracy', {'step': step, 'method': self.method, 'seed': self.args.seed,
                                                'task': k, 'accuracy': float(acc)})
