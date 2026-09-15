@@ -146,16 +146,19 @@ def fig_detector(runs, frozen, path):
         for s in st.loc[st['consolidated'].astype(bool), 'step']:
             ax.axvline(s, color=SERIES[2], lw=0.9, alpha=0.8, zorder=0)
         pk = st.loc[st['peak_fired'].astype(bool)]
-        ax.scatter(pk['step'], np.full(len(pk), ax.get_ylim()[1] * 0.97), marker='v', s=16, color=SERIES[6],
-                   zorder=3, label='peak (re-arm)')
+        ax.scatter(pk['step'], np.full(len(pk), float(st['win_mean'].max()) * 1.3), marker='v', s=16,
+                   color=SERIES[6], zorder=3, label='peak (re-arm)')
         for b in task_boundaries(stream):
             ax.axvline(b, color=MUTED, lw=0.4, alpha=0.3, zorder=0)
         ax.set_yscale('symlog', linthresh=0.1)
+        ax.set_ylim(0, max(float(st['win_mean'].max()) * 1.5, 1.0))
         ax.set_title(f"{REGIME_LABEL.get(g, g)} — {int(st['consolidated'].sum())} consolidations (green lines)",
                      loc='left')
-    axes[0].legend(ncol=5, loc='upper right', fontsize=8)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, ncol=5, loc='upper left', bbox_to_anchor=(0.01, 0.985), fontsize=8)
     axes[-1].set_xlabel('stream step (thin gray: ground-truth dominant-task changes)')
-    fig.suptitle('Fig. 1 — Plateau detector against its thresholds (seed 1)', x=0.01, ha='left', fontweight='bold')
+    fig.suptitle('Fig. 1 — Plateau detector against its thresholds (seed 1)', x=0.01, y=1.01, ha='left',
+                 fontweight='bold')
     savefig(fig, path)
 
 
@@ -215,9 +218,10 @@ def fig_blocking(runs, path, window=50):
         ax.stackplot(st['step'], [cats[c] for c in labels], colors=colors, labels=labels, lw=0)
         ax.set_ylim(0, 1)
         ax.set_title(REGIME_LABEL.get(g, g), loc='left')
-    axes[0].legend(ncol=6, loc='upper right', fontsize=8)
+    handles, labels_ = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels_, ncol=6, loc='upper left', bbox_to_anchor=(0.01, 0.985), fontsize=8)
     axes[-1].set_xlabel(f'stream step ({window}-step rolling share of steps)')
-    fig.suptitle('Fig. 4 — What blocked consolidation (seed 1)', x=0.01, ha='left', fontweight='bold')
+    fig.suptitle('Fig. 4 — What blocked consolidation (seed 1)', x=0.01, y=1.01, ha='left', fontweight='bold')
     savefig(fig, path)
 
 
@@ -230,7 +234,7 @@ def fig_money(scal, res, path):
                 marker='o', ms=6, lw=2, capsize=3)
     a1.set_xticks(list(SIGMAS.values()))
     a1.set_xlabel('σ (larger = smoother transitions)')
-    a1.set_title('Consolidations per run (tfmas_star, mean, min–max over seeds)', loc='left')
+    a1.set_title('tfmas_star consolidations per run\n(mean; bars: min–max over seeds)', loc='left')
     r = res[res['regime'].isin(SIGMAS)].copy()
     r['sigma'] = r['regime'].map(SIGMAS)
     for arm in ARM_ORDER:
@@ -242,9 +246,9 @@ def fig_money(scal, res, path):
         a2.plot(list(vals), list(vals.values()), ls=':', marker='o', ms=7, mfc='none', color=c, lw=1.2, label=name)
     a2.set_xticks(list(SIGMAS.values()))
     a2.set_xlabel('σ')
-    a2.set_title('AAUC (%) — this env (filled) vs published (hollow)', loc='left')
+    a2.set_title('AAUC (%)\nthis env (filled) vs published DRIFT (hollow)', loc='left')
     a2.legend(fontsize=7.5, loc='best')
-    fig.suptitle('Fig. 5 — Does consolidation frequency track performance across σ?', x=0.01, ha='left',
+    fig.suptitle('Fig. 5 — Does consolidation frequency track performance across σ?', x=0.01, y=1.06, ha='left',
                  fontweight='bold')
     savefig(fig, path)
 
