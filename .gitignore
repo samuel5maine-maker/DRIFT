@@ -37,3 +37,8 @@ checkpoints/
 telemetry/*
 !telemetry/provenance/
 experiments/logs/
+
+# protocol-t2 study outputs (fixed OMP_NUM_THREADS=2)
+results_t2/
+telemetry_t2/
+experiments/logs_t2/

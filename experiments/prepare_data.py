@@ -7,7 +7,6 @@ cache first fixes the stream for every later seed. Building them here with --see
     python experiments/prepare_data.py --seed 1
 """
 import os
-import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -15,19 +14,7 @@ sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
 from run_matrix import REGIMES  # noqa: E402
-
-
-def main_args(argv):
-    """Parse argv with main.py's own argparse block, so defaults cannot drift from main.py."""
-    src = open(os.path.join(ROOT, 'main.py'), encoding='utf-8').read()
-    block = src[src.index("    parser = argparse.ArgumentParser"):src.index("    args = parser.parse_args()")]
-    block = re.sub(r'(?m)^    ', '', block)
-    ns = {}
-    exec('import argparse\nfrom distutils.util import strtobool\nfrom training.utils import str2dict\n' + block, ns)
-    args = ns['parser'].parse_args(argv)
-    args.ratio_valid_test = [float(i) for i in args.ratio_valid_test]
-    args.cuda = args.cuda == 'yes'
-    return args
+from drift_args import main_args  # noqa: E402
 
 
 def main():

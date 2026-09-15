@@ -16,6 +16,10 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from drift_args import main_args  # noqa: E402
+from training.utils import result_name  # noqa: E402
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PY = sys.executable
 
@@ -33,45 +37,24 @@ REGIMES = {
 DATASET_FLAGS = {'Arxiv-CL': ['--ori_data_path', os.path.join(ROOT, 'data', 'raw')]}
 
 
-def job(regime, method, seed, dataset='CoraFull-CL', backbone='GCN', star_args=None):
+def job(regime, method, seed, dataset='CoraFull-CL', backbone='GCN', star_args=None, method_args=None):
+    """One main.py invocation. method_args (or star_args, for tfmas_star) become --{method}_args."""
+    method_args = star_args if star_args is not None else method_args
     cmd = ['--dataset', dataset, '--backbone', backbone, '--method', method, '--seed', str(seed), '--cuda', 'no']
     cmd += DATASET_FLAGS.get(dataset, [])
     cmd += REGIMES[regime]
-    if star_args is not None:
-        cmd += ['--tfmas_star_args', ';'.join(f"'{k}':{v}" for k, v in star_args.items())]
+    if method_args:
+        cmd += [f'--{method}_args', ';'.join(f"'{k}':{v}" for k, v in method_args.items())]
     name = f'{dataset}_{backbone}_{regime}_{method}'
-    if star_args is not None:
-        name += '_' + '_'.join(f'{k}{v}' for k, v in star_args.items())
+    if method_args:
+        name += '_' + '_'.join(f'{k}{v}' for k, v in method_args.items())
     name += f'_seed{seed}'
     return {'name': name, 'regime': regime, 'args': cmd}
 
 
 def result_prefix(j):
-    """Mirror of main.py's result naming, to detect finished jobs."""
-    a = dict(zip(j['args'][::2], j['args'][1::2]))  # every flag takes exactly one value
-    s = f"{a['--dataset']}_{a['--backbone']}_{a['--method']}_batch10"
-    setting = a['--setting']
-    if setting == 'tfo_blurry':
-        s += f"_blurry{int(round((1.0 - float(a['--percentage'])) * 100))}"
-    elif setting == 'tfo_bb':
-        s += f"_boundaryblurry_K{a['--blurry_batch_count']}_ratio50"
-    elif setting == 'tfo_gaussian':
-        s += f"_gaussian_sigma{float(a['--gaussian_sigma'])}"
-    elif setting == 'tfocis':
-        s += '_clsincre'
-    if a['--method'] == 'tfmas_star':
-        hp = dict(kv.replace("'", '').split(':') for kv in a['--tfmas_star_args'].split(';'))
-        s += f"_lth{float(hp['l_th'])}_sth{float(hp['std_th'])}"
-        for k in ('window', 'buffer_size', 'lam', 'passes', 'window_push'):
-            if k in hp:
-                v = hp[k]
-                try:
-                    v = float(v)
-                except ValueError:
-                    pass
-                s += f'_{k}{v}'
-    s += f"_seed{a['--seed']}"
-    return os.path.join(ROOT, 'results', s)
+    args = main_args(j['args'])
+    return os.path.join(ROOT, args.result_path, result_name(args))
 
 
 def done(j):
@@ -79,14 +62,27 @@ def done(j):
     return os.path.exists(p + '_tm.txt') or os.path.exists(p + '_cfmat.txt')
 
 
+def with_results_dir(jobs, results_dir):
+    if results_dir == 'results':
+        return jobs
+    for j in jobs:
+        j['args'] = j['args'] + ['--result_path', results_dir]
+    return jobs
+
+
 def run(j, threads):
     if done(j):
         return j['name'], 'skipped', 0.0
-    os.makedirs(os.path.join(ROOT, 'experiments', 'logs'), exist_ok=True)
-    env = dict(os.environ, MAS_TELEMETRY_DIR=os.path.join(ROOT, 'telemetry'), OMP_NUM_THREADS=str(threads),
+    results_dir = os.path.basename(os.path.normpath(main_args(j['args']).result_path))
+    suffix = '' if results_dir == 'results' else results_dir[len('results'):] if results_dir.startswith('results') \
+        else '_' + results_dir
+    log_dir = os.path.join(ROOT, 'experiments', 'logs' + suffix)
+    os.makedirs(log_dir, exist_ok=True)
+    # telemetry and logs follow the results directory, so a new protocol never overwrites an earlier study's files
+    env = dict(os.environ, MAS_TELEMETRY_DIR=os.path.join(ROOT, 'telemetry' + suffix), OMP_NUM_THREADS=str(threads),
                PYTHONWARNINGS='ignore')
     t0 = time.time()
-    with open(os.path.join(ROOT, 'experiments', 'logs', j['name'] + '.log'), 'w') as log:
+    with open(os.path.join(log_dir, j['name'] + '.log'), 'w') as log:
         rc = subprocess.call([PY, 'main.py'] + j['args'], cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
     status = 'ok' if rc == 0 and done(j) else f'FAILED rc={rc}'
     dt = time.time() - t0
@@ -115,6 +111,10 @@ def plan_jobs(plan, thresholds=None):
         return [job('sigma20', m, s) for m in ('er', 'agem') for s in (1, 2, 3)]
     if plan == 'gate0_arxiv':  # ER, A-GEM, MAS* (legacy tfmas) and Bare on Arxiv-CL at published sigma=60
         return [job('sigma60', m, s, dataset='Arxiv-CL') for m in ('er', 'agem', 'tfmas', 'bare') for s in (1, 2, 3)]
+    if plan == 'base_t2':      # baselines spec: existing DRIFT baselines + new methods at each dataset's Table-2 sigma
+        methods = [(m, None) for m in ('bare', 'er', 'agem', 'tfmas', 'dmsg', 'er_cbrs')]
+        return [job(r, m, s, dataset=d, method_args=hp) for d, r in (('CoraFull-CL', 'sigma20'), ('Arxiv-CL', 'sigma60'))
+                for m, hp in methods for s in (1, 2, 3)]
     if plan == 'gate0_arxiv_timing':
         return [job('sigma60', 'er', 1, dataset='Arxiv-CL')]
     if plan == 'robust':
@@ -128,6 +128,11 @@ def main():
     ap.add_argument('--plan', required=True)
     ap.add_argument('--thresholds', help='file with "l_th std_th" per line')
     ap.add_argument('--workers', type=int, default=1)
+    ap.add_argument('--threads', type=int, default=2,
+                    help='OMP_NUM_THREADS for every run. Results are bit-reproducible only at a fixed thread count '
+                         'without oversubscription (workers * threads <= cores); the serial cache-building job uses '
+                         'the same value.')
+    ap.add_argument('--results', default='results', help='result directory (relative to the repo root)')
     ap.add_argument('--dry-run', action='store_true')
     a = ap.parse_args()
 
@@ -135,7 +140,7 @@ def main():
     if a.thresholds:
         with open(a.thresholds) as f:
             thresholds = [tuple(float(x) for x in line.split()) for line in f if line.strip() and not line.startswith('#')]
-    jobs = plan_jobs(a.plan, thresholds)
+    jobs = with_results_dir(plan_jobs(a.plan, thresholds), a.results)
     pending = [j for j in jobs if not done(j)]
     print(f'{len(jobs)} jobs, {len(pending)} pending', flush=True)
     if a.dry_run:
@@ -147,14 +152,12 @@ def main():
     first_per_regime = {}
     for j in pending:
         first_per_regime.setdefault(j['regime'], j)
-    threads_serial = os.cpu_count() or 8
     for j in first_per_regime.values():
-        run(j, threads_serial)
+        run(j, a.threads)
     rest = [j for j in pending if j not in first_per_regime.values()]
 
-    threads = max(1, (os.cpu_count() or 8) // a.workers)
     with ThreadPoolExecutor(max_workers=a.workers) as ex:
-        results = list(ex.map(lambda j: run(j, threads), rest))
+        results = list(ex.map(lambda j: run(j, a.threads), rest))
     failed = [r for r in results if r[1].startswith('FAILED')]
     print(f'finished: {len(results)} run, {len(failed)} failed', flush=True)
     for r in failed:

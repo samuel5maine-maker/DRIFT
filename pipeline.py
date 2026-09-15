@@ -7,6 +7,7 @@ from Backbones.model_factory import get_model
 from dataset.utils import NodeLevelDataset
 from training.utils import mkdir_if_missing, shuffle_list
 from gaussian_utils import compute_centers, gaussian_task_weights, build_gaussian_stream
+from telemetry import EvalTelemetry
 import importlib
 import copy
 import dgl
@@ -14,6 +15,11 @@ import time
 import random
 
 joint_alias = ['joint', 'Joint', 'joint_replay_all', 'jointtrain']
+# methods whose NET(...) takes dataset= (they replay nodes from the full graph)
+NEEDS_DATASET = ['gss', 'agem', 'er', 'ergnn', 'dmsg', 'tfmas_star',
+                 'er_cbrs', 'der', 'derpp', 'pdgnn', 'lwf_online', 'clser', 'dercls']
+
+
 def get_pipeline(args):
     # choose the pipeline for the chosen setting
     # Joint training method uses a special pipeline that trains on all tasks jointly
@@ -547,7 +553,7 @@ def pipeline_tfo(dataset, continuum, tasks_te, args):
         model.cuda(args.gpu)
     life_model = importlib.import_module(f'Baselines.{args.method}_model')
     # Pass dataset to GSS, AGEM, ER, and DMSG models for accessing full graph
-    if args.method in ['gss', 'agem', 'er', 'ergnn', 'dmsg', 'tfmas_star']:
+    if args.method in NEEDS_DATASET:
         life_model_ins = life_model.NET(model, args, dataset=dataset)
     else:
         life_model_ins = life_model.NET(model, args)
@@ -567,6 +573,7 @@ def pipeline_tfo(dataset, continuum, tasks_te, args):
     task_list = [] # task list
     current_task = 0
     time_start = time.time()
+    tel_hook = EvalTelemetry(args)
 
     for (i, (subgraph, t, ids_batch)) in enumerate(continuum):
         # only training on data of one task each time
@@ -576,6 +583,7 @@ def pipeline_tfo(dataset, continuum, tasks_te, args):
         # if t != current_task: # eval when task changes
             res_per_t, avg_acc, current_res_per_t, current_avg_acc = eval(model, continuum, tasks_te, current_task, args)
             result_list.append(res_per_t)
+            tel_hook.on_eval(i, res_per_t, life_model_ins)
             avg_acc_list.append(avg_acc)
             current_result_list.append(current_res_per_t)
             current_avg_acc_list.append(current_avg_acc)
@@ -596,6 +604,7 @@ def pipeline_tfo(dataset, continuum, tasks_te, args):
     
     res_per_t, avg_acc, current_res_per_t, current_avg_acc = eval(model, continuum, tasks_te, args.n_tasks-1, args) # test after training
     result_list.append(res_per_t)
+    tel_hook.on_final(i + 1, model, continuum.graphs, tasks_te, life_model_ins, res_per_t, masked=False)
     avg_acc_list.append(avg_acc)
     current_result_list.append(current_res_per_t)
     current_avg_acc_list.append(current_avg_acc)
@@ -618,7 +627,7 @@ def pipeline_tfocis(dataset, continuum, tasks_te, args):
         model.cuda(args.gpu)
     life_model = importlib.import_module(f'Baselines.{args.method}_model')
     # Pass dataset to GSS, AGEM, ER, and DMSG models for accessing full graph
-    if args.method in ['gss', 'agem', 'er', 'ergnn', 'dmsg', 'tfmas_star']:
+    if args.method in NEEDS_DATASET:
         life_model_ins = life_model.NET(model, args, dataset=dataset)
     else:
         life_model_ins = life_model.NET(model, args)
@@ -635,6 +644,7 @@ def pipeline_tfocis(dataset, continuum, tasks_te, args):
     task_list = [] # task list
     current_task = 0
     time_start = time.time()
+    tel_hook = EvalTelemetry(args)
 
     for (i, (subgraph, t, ids_batch)) in enumerate(continuum):
         # only training on data of one task each time
@@ -644,6 +654,7 @@ def pipeline_tfocis(dataset, continuum, tasks_te, args):
         # if t != current_task: # eval when task changes
             res_per_t, avg_acc, current_res_per_t, current_avg_acc = eval(model, continuum, tasks_te, current_task, args)
             result_list.append(res_per_t)
+            tel_hook.on_eval(i, res_per_t, life_model_ins)
             avg_acc_list.append(avg_acc)
             current_result_list.append(current_res_per_t)
             current_avg_acc_list.append(current_avg_acc)
@@ -664,6 +675,7 @@ def pipeline_tfocis(dataset, continuum, tasks_te, args):
     
     res_per_t, avg_acc, current_res_per_t, current_avg_acc = eval(model, continuum, tasks_te, args.n_tasks-1, args) # test after training
     result_list.append(res_per_t)
+    tel_hook.on_final(i + 1, model, continuum.graphs, tasks_te, life_model_ins, res_per_t, masked=True)
     avg_acc_list.append(avg_acc)
     current_result_list.append(current_res_per_t)
     current_avg_acc_list.append(current_avg_acc)
@@ -691,7 +703,7 @@ def pipeline_tfobb(dataset, data, tasks_te, args):
         model.cuda(args.gpu)
     life_model = importlib.import_module(f'Baselines.{args.method}_model')
 
-    if args.method in ['gss', 'agem', 'er', 'ergnn', 'dmsg', 'tfmas_star']:
+    if args.method in NEEDS_DATASET:
         life_model_ins = life_model.NET(model, args, dataset=dataset)
     else:
         life_model_ins = life_model.NET(model, args)
@@ -707,6 +719,7 @@ def pipeline_tfobb(dataset, data, tasks_te, args):
     task_list = [] # task list
     current_task = 0
     time_start = time.time()
+    tel_hook = EvalTelemetry(args)
 
     bnc = 0
     for t, subgraph in enumerate(subgraphs):
@@ -726,6 +739,7 @@ def pipeline_tfobb(dataset, data, tasks_te, args):
             if ((bnc % args.log_every) == 0) or (t != current_task):
                 res_per_t, avg_acc, current_res_per_t, current_avg_acc = eval(model, subgraphs, tasks_te, current_task, args)
                 result_list.append(res_per_t)
+                tel_hook.on_eval(bnc, res_per_t, life_model_ins)
                 avg_acc_list.append(avg_acc)
                 current_result_list.append(current_res_per_t)
                 current_avg_acc_list.append(current_avg_acc)
@@ -748,6 +762,7 @@ def pipeline_tfobb(dataset, data, tasks_te, args):
 
     res_per_t, avg_acc, current_res_per_t, current_avg_acc = eval(model, subgraphs, tasks_te, args.n_tasks-1, args) # test after training
     result_list.append(res_per_t)
+    tel_hook.on_final(bnc, model, subgraphs, tasks_te, life_model_ins, res_per_t, masked=True)
     avg_acc_list.append(avg_acc)
     current_result_list.append(current_res_per_t)
     current_avg_acc_list.append(current_avg_acc)
@@ -876,7 +891,7 @@ def pipeline_gaussian(dataset, data, tasks_te, args):
         merged_subgraph = merged_subgraph.to(device='cuda:{}'.format(args.gpu))
 
     life_model = importlib.import_module(f'Baselines.{args.method}_model')
-    if args.method in ['gss', 'agem', 'er', 'ergnn', 'dmsg', 'tfmas_star']:
+    if args.method in NEEDS_DATASET:
         life_model_ins = life_model.NET(model, args, dataset=dataset)
     else:
         life_model_ins = life_model.NET(model, args)
@@ -896,6 +911,7 @@ def pipeline_gaussian(dataset, data, tasks_te, args):
     task_list = []
     current_task = 0  
     time_start = time.time()
+    tel_hook = EvalTelemetry(args)
 
     for b, (batch_orig_ids, _, weights) in enumerate(stream):
         if b % args.log_every == 0:
@@ -903,6 +919,7 @@ def pipeline_gaussian(dataset, data, tasks_te, args):
                 model, eval_subgraphs, tasks_te, current_task, args
             )
             result_list.append(res_per_t)
+            tel_hook.on_eval(b, res_per_t, life_model_ins)
             avg_acc_list.append(avg_acc)
             current_result_list.append(cur_res)
             current_avg_acc_list.append(cur_acc)
@@ -923,6 +940,7 @@ def pipeline_gaussian(dataset, data, tasks_te, args):
         model, eval_subgraphs, tasks_te, args.n_tasks - 1, args
     )
     result_list.append(res_per_t)
+    tel_hook.on_final(len(stream), model, eval_subgraphs, tasks_te, life_model_ins, res_per_t, masked=True)
     avg_acc_list.append(avg_acc)
     current_result_list.append(cur_res)
     current_avg_acc_list.append(cur_acc)

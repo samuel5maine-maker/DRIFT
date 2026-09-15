@@ -106,6 +106,11 @@ class NET(torch.nn.Module):
     def forward(self, features):
         return self.net(features)
 
+    def buffer_labels(self):
+        if not self.buffer_ids:
+            return []
+        return self.full_graph.ndata['label'][torch.tensor(self.buffer_ids)].view(-1).tolist()
+
     def set_stream_info(self, task=None, weights=None):
         """Ground-truth stream state for the step about to be observed (telemetry only)."""
         if self.tel is None:

@@ -6,7 +6,7 @@ import argparse
 import sys
 from distutils.util import strtobool
 from pipeline import data_prepare, data_prepare_blurry, data_prepare_boundaryblurry, data_prepare_tem, data_prepare_gaussian, get_pipeline
-from training.utils import set_seed, mkdir_if_missing, remove_illegal_characters,str2dict, assign_hyp_param
+from training.utils import set_seed, mkdir_if_missing, remove_illegal_characters,str2dict, assign_hyp_param, result_name
 from Backbones.model_factory import get_model
 from dataset.utils import NodeLevelDataset, Continuum, TimeIncrementalDataset, TimeContinuum
 from metrics import confusion_matrix, tf_metrics
@@ -72,7 +72,8 @@ if __name__ == '__main__':
     parser.add_argument('--weight-decay', type=float, default=5e-4, help="weight decay")
     parser.add_argument('--backbone', type=str, default='GCN', help="backbone GNN, [GAT, GCN, GIN]")
     parser.add_argument('--method', type=str,
-                        choices=["bare", 'agem', 'mas', 'joint', 'gss', 'er', 'tfmas', 'tfmas_star', 'ssm', 'dmsg', 'sem'], default="bare",
+                        choices=["bare", 'agem', 'mas', 'joint', 'gss', 'er', 'tfmas', 'tfmas_star', 'ssm', 'dmsg', 'sem',
+                                 'er_cbrs', 'der', 'derpp', 'pdgnn', 'lwf_online', 'clser', 'dercls'], default="bare",
                         help="baseline continual learning method")
     parser.add_argument('--setting', type=str, default='tfo_gaussian', help="setting [tfo, tfocis, tfo_bb, tfo_gaussian]")
     parser.add_argument('--time_streaming', type=strtobool, default=False, help="whether to load time incremental graph")
@@ -125,6 +126,9 @@ if __name__ == '__main__':
     parser.add_argument('--mas_args', type=str2dict, default={'memory_strength': 10000.})
     parser.add_argument('--tfmas_star_args', type=str2dict, default={},
                         help="MAS* (Algorithm 1): 'l_th':x;'std_th':y required; optional 'window', 'buffer_size', 'lam', 'passes', 'window_push'")
+    for _m in ('er_cbrs', 'der', 'derpp', 'pdgnn', 'lwf_online', 'clser', 'dercls'):
+        parser.add_argument(f'--{_m}_args', type=str2dict, default={},
+                            help=f"{_m} hyperparameters as 'k':v;... (defaults in Baselines/{_m}_model.py)")
     parser.add_argument('--gem_args', type=str2dict, default={'memory_strength': 0.5, 'n_memories': 100})
     parser.add_argument('--agem_args', type=str2dict, default={'budget': [100,1000], 'memory_proportion': [1., 2., 3.]})
     parser.add_argument('--er_args', type=str2dict, default={'budget': [100,1000], 'memory_proportion': [1., 2., 3.]})
@@ -167,26 +171,7 @@ if __name__ == '__main__':
 
     # path for saving results
     mkdir_if_missing(args.result_path)
-    subfolder = f'{args.dataset}_{args.backbone}_{args.method}_batch{args.batch_size}'
-    if args.setting == 'tfo_blurry':
-        subfolder = subfolder + f'_blurry{int(round((1.0 - args.percentage)*100))}'
-    elif args.setting == 'tfo_bb':
-        K = getattr(args, 'blurry_batch_count', 2)
-        mix_ratio = getattr(args, 'boundary_mix_ratio', 0.5)
-        subfolder = subfolder + f'_boundaryblurry_K{K}_ratio{int(mix_ratio*100)}'
-    elif args.setting == 'tfo_gaussian':
-        subfolder = subfolder + f'_gaussian_sigma{args.gaussian_sigma}'
-    elif args.setting == 'tfocis':
-        subfolder = subfolder + f'_clsincre'
-    if args.time_streaming:
-        subfolder = subfolder + f'_timestream{args.n_time_tasks}'
-    if args.method == 'tfmas_star':
-        hp = args.tfmas_star_args
-        subfolder += f"_lth{hp.get('l_th')}_sth{hp.get('std_th')}"
-        for k in ('window', 'buffer_size', 'lam', 'passes', 'window_push'):
-            if k in hp:
-                subfolder += f'_{k}{hp[k]}'
-    subfolder += f'_seed{args.seed}'
+    subfolder = result_name(args)
 
     for _ in range(args.repeats):
         result_list, avg_acc_list, current_result_list, current_avg_acc_list, task_list, time_spent = main(dataset, continuum, data[1][1], args)

@@ -106,6 +106,49 @@ def set_seed(args=None):
     # single-threaded sampling is. Torch keeps its own thread pool.
     dgl.utils.set_num_threads(1)
 
+# Method-argument dicts for baselines added after the DRIFT release. Their explicitly passed keys become part of
+# result and telemetry names, so hyperparameter sweeps do not overwrite each other.
+METHOD_ARGS = {'tfmas_star': 'tfmas_star_args', 'er_cbrs': 'er_cbrs_args', 'der': 'der_args', 'derpp': 'derpp_args',
+               'pdgnn': 'pdgnn_args', 'lwf_online': 'lwf_online_args', 'clser': 'clser_args',
+               'dercls': 'dercls_args'}
+
+
+def method_suffix(args):
+    if args.method not in METHOD_ARGS:
+        return ''
+    hp = getattr(args, METHOD_ARGS[args.method], {}) or {}
+    if args.method == 'tfmas_star':
+        s = f"_lth{hp.get('l_th')}_sth{hp.get('std_th')}"
+        for k in ('window', 'buffer_size', 'lam', 'passes', 'window_push'):
+            if k in hp:
+                s += f'_{k}{hp[k]}'
+        return s
+    return ''.join(f'_{k}{hp[k]}' for k in sorted(hp))
+
+
+def result_name(args):
+    """Result file prefix written by main.py (unchanged for the original DRIFT methods)."""
+    name = f'{args.dataset}_{args.backbone}_{args.method}_batch{args.batch_size}'
+    if args.setting == 'tfo_blurry':
+        name += f'_blurry{int(round((1.0 - args.percentage) * 100))}'
+    elif args.setting == 'tfo_bb':
+        K = getattr(args, 'blurry_batch_count', 2)
+        mix_ratio = getattr(args, 'boundary_mix_ratio', 0.5)
+        name += f'_boundaryblurry_K{K}_ratio{int(mix_ratio * 100)}'
+    elif args.setting == 'tfo_gaussian':
+        name += f'_gaussian_sigma{args.gaussian_sigma}'
+    elif args.setting == 'tfocis':
+        name += '_clsincre'
+    if args.time_streaming:
+        name += f'_timestream{args.n_time_tasks}'
+    return name + method_suffix(args) + f'_seed{args.seed}'
+
+
+def run_name(args):
+    """Telemetry run directory: method plus its explicitly passed hyperparameters."""
+    return args.method + method_suffix(args)
+
+
 def remove_illegal_characters(name, replacement='_'):
     # replace any potential illegal characters with 'replacement'
     for c in ['-', '[' ,']' ,'{', '}', "'", ',', ':', ' ']:
