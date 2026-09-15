@@ -223,7 +223,7 @@ class NET(torch.nn.Module):
                 n_edges = subg.edges()[0].shape[0]
                 subg.remove_edges(list(range(n_edges)))
                 subg = dgl.add_self_loop(subg)
-                self.aux_g = subg.to(device='cuda:{}'.format(self.gpu))
+                self.aux_g = subg.to(g.device)
                 self.aux_features = self.aux_g.srcdata['feat']
                 self.aux_labels = self.aux_g.dstdata['label'].squeeze()
             else:

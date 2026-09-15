@@ -24,13 +24,18 @@ REGIMES = {
     'sigma3': ['--setting', 'tfo_gaussian', '--gaussian_sigma', '3'],
     'sigma10': ['--setting', 'tfo_gaussian', '--gaussian_sigma', '10'],
     'sigma20': ['--setting', 'tfo_gaussian', '--gaussian_sigma', '20'],
+    'sigma60': ['--setting', 'tfo_gaussian', '--gaussian_sigma', '60'],
     'bb5': ['--setting', 'tfo_bb', '--blurry_batch_count', '5'],
     'blurry30': ['--setting', 'tfo_blurry', '--percentage', '0.7'],
 }
 
 
+DATASET_FLAGS = {'Arxiv-CL': ['--ori_data_path', os.path.join(ROOT, 'data', 'raw')]}
+
+
 def job(regime, method, seed, dataset='CoraFull-CL', backbone='GCN', star_args=None):
     cmd = ['--dataset', dataset, '--backbone', backbone, '--method', method, '--seed', str(seed), '--cuda', 'no']
+    cmd += DATASET_FLAGS.get(dataset, [])
     cmd += REGIMES[regime]
     if star_args is not None:
         cmd += ['--tfmas_star_args', ';'.join(f"'{k}':{v}" for k, v in star_args.items())]
@@ -43,7 +48,7 @@ def job(regime, method, seed, dataset='CoraFull-CL', backbone='GCN', star_args=N
 
 def result_prefix(j):
     """Mirror of main.py's result naming, to detect finished jobs."""
-    a = dict(zip(j['args'][::2], j['args'][1::2]))
+    a = dict(zip(j['args'][::2], j['args'][1::2]))  # every flag takes exactly one value
     s = f"{a['--dataset']}_{a['--backbone']}_{a['--method']}_batch10"
     setting = a['--setting']
     if setting == 'tfo_blurry':
@@ -106,6 +111,12 @@ def plan_jobs(plan, thresholds=None):
             jobs.append(job(r, 'tfmas', seed))
             jobs.append(job(r, 'bare', seed))
         return jobs
+    if plan == 'gate0_cora':   # spec Gate 0: ER and A-GEM, Gaussian mixing, published sigma (tfmas/bare exist)
+        return [job('sigma20', m, s) for m in ('er', 'agem') for s in (1, 2, 3)]
+    if plan == 'gate0_arxiv':  # ER, A-GEM, MAS* (legacy tfmas) and Bare on Arxiv-CL at published sigma=60
+        return [job('sigma60', m, s, dataset='Arxiv-CL') for m in ('er', 'agem', 'tfmas', 'bare') for s in (1, 2, 3)]
+    if plan == 'gate0_arxiv_timing':
+        return [job('sigma60', 'er', 1, dataset='Arxiv-CL')]
     if plan == 'robust':
         return [job(r, 'tfmas_star', 1, star_args={'l_th': l, 'std_th': s})
                 for r in ('sigma3', 'sigma10', 'sigma20') for l, s in thresholds]
