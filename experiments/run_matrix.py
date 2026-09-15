@@ -114,6 +114,27 @@ def clser_grid(sigma):
     return cfgs
 
 
+def top_seed0_configs(dataset, regime, method, keys, k):
+    """Best k seed-0 configurations for a method, read from the result files' AAUC lines."""
+    import glob
+    import re
+    pat = os.path.join(OUT_ROOT, 'results_t2', f'{dataset}_GCN_{method}_batch10_{regime}*_seed0_tm.txt')
+    scored = []
+    for f in glob.glob(pat):
+        aauc = float(re.search(r'AAUC: ([\d.]+)', open(f).read()).group(1))
+        name = os.path.basename(f)
+        hp = {}
+        for key in sorted(keys, key=len, reverse=True):
+            m = re.search(rf'_{key}(-?[\d.]+)(?=_|$)', name)
+            if m:
+                hp[key] = float(m.group(1))
+                name = name[:m.start()] + name[m.end():]
+        if len(hp) == len(keys):
+            scored.append((aauc, hp))
+    scored.sort(key=lambda t: -t[0])
+    return [hp for _, hp in scored[:k]]
+
+
 def plan_jobs(plan, thresholds=None):
     if plan == 'calib_t1':   # detector-off traces, calibration seed 0
         return [job(r, 'tfmas_star', 0, star_args={'l_th': -1.0, 'std_th': -1.0})
@@ -160,6 +181,15 @@ def plan_jobs(plan, thresholds=None):
                 jobs += [job(regime, method, s_, dataset=dataset, method_args=args_) for s_ in (1, 2, 3)]
             jobs += [job(regime, 'pdgnn', s_, dataset=dataset, backbone='SGC') for s_ in (1, 2, 3)]
         return jobs
+    if plan == 'tune_arxiv_small':
+        # Arxiv runs ~5x longer than CoraFull, so LwF-online's 27-point grid is not repeated there: its best three
+        # CoraFull configurations are carried over. DER, DER++ and CLS-ER keep their full grids (documented in NOTES).
+        grid = [('der', {'alpha': a}) for a in (0.5, 1.0)]
+        grid += [('derpp', {'alpha': a, 'beta': b}) for a in (0.2, 0.5) for b in (0.5, 1.0)]
+        grid += [('lwf_online', hp) for hp in top_seed0_configs(
+            'CoraFull-CL', 'gaussian_sigma20.0', 'lwf_online', ['T', 'lambda_dist', 'update_every'], 3)]
+        grid += clser_grid(60)
+        return [job('sigma60', m, 0, dataset='Arxiv-CL', method_args=hp) for m, hp in grid]
     if plan in ('tune_cora', 'tune_arxiv'):
         dataset, regime, sigma = ('CoraFull-CL', 'sigma20', 20) if plan == 'tune_cora' else ('Arxiv-CL', 'sigma60', 60)
         grid = []

@@ -238,3 +238,11 @@ The protocol:
 
    This is for Algorithm R with k=100 over CoraFull's real class sizes (all 19,793 nodes). The DRIFT train-split stream gives 24.2 / 43.6 / 4.3, and CBRS gives 0 / 40.0 / 0. The spec's percentages (23.8%, 57.9%) are consistent with its own counts, so the spec simulated a different class-size distribution. The real imbalance is worse than stated. `tests/test_replay_buffers.py` now checks against the exact expectation.
 6. **§5.5 "λ = 0.999 window as % of stream".** With the real stream lengths (Q2), CoraFull is ~84%, not ~50%. CLS-ER's own paper uses α = 0.99 for its general-CL benchmark (MNIST-360), not 0.999. The tuning grid covers both, plus stream-scaled decays (`clser_grid` in `experiments/run_matrix.py`).
+
+### Hyperparameter tuning protocol (new methods)
+
+- **Seed 0 only**, disjoint from the evaluation seeds {1, 2, 3}; selection by highest A_AUC. Single-seed selection is noisy relative to the ~1-2 point thread/seed spread, so `analysis/baselines/tuning.md` prints every configuration, not just the winner.
+- Grids come from each method's own source: DER α ∈ {0.5, 1.0} and DER++ α ∈ {0.2, 0.5}, β ∈ {0.5, 1.0} (DER paper Table 10, MNIST-360 — the general-continual benchmark); LwF-online λ ∈ {0.1, 1, 10}, T ∈ {0.2, 2, 20}, update_every ∈ {1, 10, 100} (spec §5.4 / OCGL); CLS-ER: the paper's MNIST-360 row, the official repo defaults, and stream-scaled decays (plastic window σ, stable window {3, 10}·σ).
+- lr, batch size, replay ratio and memory size are fixed by DRIFT's protocol (§2) and are not tuned.
+- **Deviation, for compute:** an Arxiv-CL run takes ~5x a CoraFull-CL run, so LwF-online's 27-point grid was not repeated on Arxiv. Its best three CoraFull configurations were carried over (`tune_arxiv_small`). DER, DER++ and CLS-ER keep their full grids on both datasets.
+- ER-CBRS and PDGNN have no tuned hyperparameters: both inherit DRIFT's memory size and 1:1 replay ratio.
