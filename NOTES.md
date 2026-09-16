@@ -246,3 +246,52 @@ The protocol:
 - lr, batch size, replay ratio and memory size are fixed by DRIFT's protocol (§2) and are not tuned.
 - **Deviation, for compute:** an Arxiv-CL run takes ~5x a CoraFull-CL run, so LwF-online's 27-point grid was not repeated on Arxiv. Its best three CoraFull configurations were carried over (`tune_arxiv_small`). DER, DER++ and CLS-ER keep their full grids on both datasets.
 - ER-CBRS and PDGNN have no tuned hyperparameters: both inherit DRIFT's memory size and 1:1 replay ratio.
+
+---
+
+## Outcomes: Gaussian mixing at the Table-2 σ (protocol t2, seeds 1–3)
+
+[run] Full tables: `analysis/baselines/results.md`. Tuning: `analysis/baselines/tuning.md`. A_AUC ↑; the selected configuration is shown in parentheses.
+
+| Method | CoraFull-CL (σ=20) | Arxiv-CL (σ=60) | source |
+|---|---|---|---|
+| Bare | 24.2 ± 0.4 | 22.2 ± 1.8 | reproduced |
+| ER | 32.8 ± 1.0 | 35.6 ± 1.7 | reproduced |
+| A-GEM | 32.1 ± 0.7 | 33.5 ± 1.6 | reproduced |
+| MAS* (DRIFT `tfmas`) | 29.7 ± 0.6 | **42.6 ± 1.1** | reproduced |
+| DMSG | 34.6 ± 0.7 | 32.3 ± 1.6 | reproduced |
+| ER-CBRS | 33.3 ± 1.0 | 30.2 ± 1.2 | new |
+| DER | 31.3 ± 0.9 (α=0.5) | 41.3 ± 0.8 (α=1.0) | new |
+| DER++ | 33.7 ± 1.0 (0.5/1.0) | 37.4 ± 0.8 (0.5/0.5) | new |
+| PDGNN [SGC backbone] | 35.4 ± 1.2 | 34.5 ± 1.3 | new |
+| LwF-online (no memory) | 38.0 ± 1.9 | 39.9 ± 2.5 | new |
+| CLS-ER (stable EMA) | 38.6 ± 1.2 | 37.2 ± 0.4 | new |
+| combination, all terms (CBRS) | 37.1 ± 0.9 | 31.8 ± 1.5 | new |
+
+### Findings
+
+1. **§6.3: coverage is a bottleneck for uniform reservoir.**
+   - ER's final per-class accuracy correlates with its final buffer slots: r = 0.38 on CoraFull, 0.52 on Arxiv.
+   - Classes the buffer misses average 27.6% vs 52.0% for covered classes on CoraFull, and 13.2% vs 51.3% on Arxiv.
+   - On CoraFull, 23.7 of 70 classes end with no slots, matching the exact 24.2 predicted from class sizes.
+   - CBRS leaves no class empty and the correlation falls to r ≈ 0.23. But covered classes lose accuracy (44.5 and 48.3), so ER-CBRS helps only where many classes go uncovered: +0.5 on CoraFull, −5.4 on Arxiv (8 of 40 classes empty under uniform reservoir).
+2. **§5.5: CLS-ER's gain on CoraFull comes from evaluating an averaged model, not from the consistency loss.**
+   - With the loss: stable EMA 38.6, working model 33.8.
+   - Without it (reg_weight = 0): stable EMA 38.5, working model 32.8 (= ER).
+   - On Arxiv the chosen decay (0.99, ~100-step window) is negligible against a ~10k-step stream. EMA ≈ working model (37.2 vs 37.6), and the consistency term is within noise (37.2 vs 36.4).
+   - This is the opposite of the spec's expectation. It is consistent with the spec's own arithmetic: averaging matters only when the window is a sizeable fraction of the stream.
+3. **EMA decay from stream scale beats the vision defaults.** CLS-ER with α=0.999 (repo defaults) is last or near-last in both sweeps: 34.7 vs 37.5 best on CoraFull, 29.9 vs 37.0 on Arxiv.
+4. **§5.7: the combination is not better than its best single term.**
+   - CoraFull: all terms 37.1 ± 0.9; stored logits only 38.1 ± 1.3; EMA only 39.0 ± 0.3.
+   - Arxiv: 31.8 / 32.3 / 33.9.
+   - Every variant uses CBRS, so on Arxiv the combination inherits CBRS's deficit there. The negative result is clean on CoraFull; on Arxiv it is confounded by the buffer.
+5. **LwF-online, which keeps no memory, ranks near the top on both datasets.** Its selected teacher refreshes only every 100 batches, with a strong distillation weight (λ=10).
+6. **PDGNN** is mid-table (35.4 / 34.5). Its topology-aware embeddings cost 3.5 MB of memory on CoraFull (8,710-dim features) vs 1.6 KB for ER. It uses a different backbone (SGC + MLP) from every other row.
+7. **DRIFT's MAS* is the strongest method on Arxiv (42.6).** That is consistent with the Gate 0 answer: the code produces well above the paper's 38.4, and far above the 23.1 in the prose.
+
+### Caveats
+
+- CPU environment; published numbers are not directly comparable (Gate 0).
+- Hyperparameters were selected on a single seed.
+- LwF-online's Arxiv grid was reduced to the best three CoraFull configurations.
+- AF_s rewards underfitting. The low-forgetting rows (MAS* on Arxiv, the CLS-ER repo-default config at AF_s −4.5 on CoraFull) should be read with their A_AUC.
