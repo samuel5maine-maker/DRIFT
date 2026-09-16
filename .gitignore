@@ -1,7 +1,41 @@
-# macOS
-.DS_Store
+# =============================================================================
+# DRIFT — .gitignore
+# Shared by humans, Claude Code and Codex. Agent *instructions* (CLAUDE.md,
+# AGENTS.md, .claude/settings.json, .claude/commands/, .codex/config shared by
+# the team) stay tracked; per-machine agent state is ignored.
+# =============================================================================
 
-# Python
+# --- Experiment outputs (large, regenerable) ---------------------------------
+# Processed datasets, OGB/DGL downloads and stream caches (CoraFull stream
+# pickles are ~1 GB each). Rebuild with: python experiments/prepare_data.py --seed 1
+data/
+# Raw per-run results and checkpoints. Summaries that matter are committed under
+# analysis/ (tables, figures) and experiments/selected_hparams.json.
+results/
+results_*/
+checkpoints/
+*.pkl
+*.pt
+*.pth
+*.ckpt
+*.npy
+*.npz
+# Per-step telemetry CSVs are large; the environment provenance record is kept.
+telemetry/*
+!telemetry/provenance/
+telemetry_*/
+# Runner logs (experiments/logs/, experiments/logs_t2/, ...)
+experiments/logs*/
+*.log
+# Experiment trackers, if ever enabled
+wandb/
+mlruns/
+runs/
+lightning_logs/
+outputs/
+multirun/
+
+# --- Python ------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
@@ -11,34 +45,74 @@ __pycache__/
 .eggs/
 dist/
 build/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pytype/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.ipynb_checkpoints/
+profile_default/
+*.prof
+*.lprof
 
-# Virtual environments
+# --- Environments and secrets ------------------------------------------------
 venv/
 env/
 .venv/
+.conda/
+conda-env/
+.python-version
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.*
+credentials*.json
 
-# IDE
+# --- AI coding agents --------------------------------------------------------
+# Claude Code: keep shared settings, commands, agents and CLAUDE.md in git;
+# ignore personal overrides, local memory and agent-created worktrees.
+.claude/settings.local.json
+.claude/*.local.*
+.claude/worktrees/
+.claude/todos/
+.claude/logs/
+CLAUDE.local.md
+# Codex: keep AGENTS.md in git; ignore per-machine state and session output.
+.codex/sessions/
+.codex/log/
+.codex/history*
+.codex/*.local.*
+AGENTS.local.md
+# Scratch space either agent may create
+.scratch/
+scratch/
+tmp/
+*.tmp
+*.bak
+*.orig
+*.rej
+
+# --- Editors and IDEs --------------------------------------------------------
 .idea/
 .vscode/
+*.code-workspace
 *.swp
+*.swo
+*~
+.history/
 
-# Project artifacts
-data/
-results/
-checkpoints/
-*.pkl
-*.pt
-*.pth
-
-# Logs
-*.log
-
-# MAS* experiment outputs (raw telemetry is large; provenance is kept)
-telemetry/*
-!telemetry/provenance/
-experiments/logs/
-
-# protocol-t2 study outputs (fixed OMP_NUM_THREADS=2)
-results_t2/
-telemetry_t2/
-experiments/logs_t2/
+# --- Operating systems -------------------------------------------------------
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
