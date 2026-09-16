@@ -99,6 +99,25 @@ buffer_bytes: node id + label per slot, plus stored logits (DER family) or embed
 | CoraFull-CL | clser_plastic_alpha0.95_plastic_update_freq1.0_reg_weight0.0_stable_alpha0.99444_stable_update_freq0.9 | GCN | 1,600 | 4,495,360 | 17,981,440 | 17,983,040 |
 | CoraFull-CL | clser_plastic_alpha0.95_plastic_update_freq1.0_reg_weight0.1_stable_alpha0.99444_stable_update_freq0.9 | GCN | 1,600 | 4,495,360 | 17,981,440 | 17,983,040 |
 
+## CoraFull-CL across transition regimes (A_AUC ↑ / AF_s ↑, seeds 1–3)
+
+Each new method at its CoraFull Gaussian selection; the combination with all three terms. Non-Gaussian pipelines add evaluation points at task changes, so compare methods within a column, not across columns.
+
+| Method | Gaussian σ=20 | boundary-local K=5 | global mixing 30% |
+|---|---|---|---|
+| Bare | 24.2 ± 0.4 / -56.3 ± 7.3 | 14.5 ± 1.2 / -76.9 ± 2.0 | 7.9 ± 0.4 / -72.9 ± 2.8 |
+| ER | 32.8 ± 1.0 / -42.4 ± 2.0 | 38.6 ± 1.0 / -37.2 ± 1.8 | 28.2 ± 0.4 / -40.3 ± 2.6 |
+| A-GEM | 32.1 ± 0.7 / -54.5 ± 2.7 | 27.8 ± 3.1 / -59.4 ± 8.3 | 15.9 ± 1.0 / -59.9 ± 1.9 |
+| MAS* | 29.7 ± 0.6 / -47.0 ± 8.7 | 23.2 ± 2.4 / -65.8 ± 7.0 | 7.9 ± 0.4 / -72.9 ± 2.8 |
+| DMSG | 34.6 ± 0.7 / -32.8 ± 4.4 | 40.4 ± 1.0 / -25.7 ± 1.0 | 35.0 ± 1.3 / -26.0 ± 2.9 |
+| ER-CBRS | 33.3 ± 1.0 / -47.3 ± 5.4 | 39.1 ± 0.7 / -35.8 ± 6.1 | 28.4 ± 0.7 / -44.3 ± 0.7 |
+| DER | 31.3 ± 0.9 / -41.1 ± 5.4 | 30.4 ± 0.6 / -56.2 ± 9.0 | 8.3 ± 0.5 / -71.0 ± 3.6 |
+| DER++ | 33.7 ± 1.0 / -39.4 ± 3.0 | 39.2 ± 0.8 / -37.5 ± 3.1 | 27.3 ± 0.7 / -45.0 ± 2.9 |
+| PDGNN | 35.4 ± 1.2 / -33.4 ± 4.2 | 35.4 ± 0.5 / -42.2 ± 1.7 | 34.3 ± 1.0 / -37.9 ± 0.2 |
+| LwF-online | 38.0 ± 1.9 / -24.3 ± 2.0 | 19.6 ± 0.8 / -62.2 ± 2.1 | 6.1 ± 0.2 / -73.1 ± 0.7 |
+| CLS-ER | 38.6 ± 1.2 / -22.9 ± 1.8 | 37.8 ± 0.4 / -18.3 ± 2.4 | 38.6 ± 0.7 / -16.5 ± 1.5 |
+| DER++ + CLS-ER (CBRS) | 37.1 ± 0.9 / -21.5 ± 1.3 | 41.2 ± 0.6 / -10.9 ± 2.1 | 46.8 ± 1.8 / -17.7 ± 2.5 |
+
 ## Where the EMA methods' gains come from (spec §5.5 / §5.7 ablations)
 
 A_AUC of each model the method keeps, evaluated at the same checkpoints (seeds 1–3). "inference (EMA)" is the reported number; "working" is the trained network. If removing the consistency term leaves the EMA number unchanged, the gain comes from evaluating an averaged model, not from the regulariser.

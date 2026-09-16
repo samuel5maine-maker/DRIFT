@@ -297,3 +297,38 @@ The protocol:
 - AF_s rewards underfitting. The low-forgetting rows (MAS* on Arxiv, the CLS-ER repo-default config at AF_s −4.5 on CoraFull) should be read with their A_AUC.
 
 ⚠ **A-GEM could not run under global mixing** [run, code]. `agem_model.observe()`, used by the `tfo`/`tfo_blurry` pipelines, calls `_update_aux_graph(args)`, but the method required a `labels` argument, so every run raised `TypeError`. The argument is unused, and it is now optional. DRIFT reports A-GEM under global mixing, so the released code differs from what produced those numbers here.
+
+## Outcomes: CoraFull-CL across transition regimes (seeds 1–3)
+
+[run] Table: `analysis/baselines/results.md`, "CoraFull-CL across transition regimes". Every new method uses its **Gaussian-tuned** configuration; none was re-tuned per regime.
+
+| Method | Gaussian σ=20 | boundary-local K=5 | global mixing 30% |
+|---|---|---|---|
+| Bare | 24.2 | 14.5 | 7.9 |
+| ER | 32.8 | 38.6 | 28.2 |
+| A-GEM | 32.1 | 27.8 | 15.9 |
+| MAS* | 29.7 | 23.2 | 7.9 (bit-identical to Bare) |
+| DMSG | 34.6 | 40.4 | 35.0 |
+| ER-CBRS | 33.3 | 39.1 | 28.4 |
+| DER | 31.3 | 30.4 | **8.3** |
+| DER++ | 33.7 | 39.2 | 27.3 |
+| PDGNN | 35.4 | 35.4 | 34.3 |
+| LwF-online | 38.0 | **19.6** | **6.1** |
+| CLS-ER | 38.6 | 37.8 | 38.6 |
+| combination (CBRS, all terms) | 37.1 | **41.2** | **46.8** |
+
+**Findings**
+
+1. **No method leads in every regime.**
+   - Gaussian: CLS-ER and LwF-online lead.
+   - Boundary-local and global mixing: the combination leads (41.2, 46.8), with DMSG next.
+   - CLS-ER and PDGNN are the most regime-stable.
+2. **Methods that never replay labels collapse under global mixing**: LwF-online (6.1, below Bare), DER (8.3) and DRIFT's MAS* (7.9 = Bare).
+   - [code] The global-mixing pipeline (`pipeline_tfo`) calls `observe()`, which trains on the **full output head with no class-incremental masking**, unlike `observe_cis()` in the other regimes.
+   - Without replayed labels, the unmasked classifier is pulled toward the classes in the current batch.
+   - DER replays logits but not labels, and collapses. DER++, which also replays labels, keeps 27.3.
+   - LwF-online also drops sharply under boundary-local mixing (19.6), which does use masking. Its Gaussian-tuned teacher refresh (every 100 batches) may simply not transfer [inferred].
+3. **The combination's ranking flips across regimes.** It is mid-pack under Gaussian mixing and best elsewhere. Its CBRS buffer and three replay terms appear to matter most when the stream has sharper structure. The §5.7 ablation was run only under Gaussian mixing, so which term drives the gain in the other regimes is not measured.
+4. **A-GEM** needed a crash fix to run under global mixing (see above).
+
+**Caveat.** A_AUC in the non-Gaussian pipelines includes extra evaluation points at task changes, so the columns are not comparable with each other; compare methods within a column.
