@@ -61,3 +61,38 @@ Selection: highest A_AUC on seed 0 per method and dataset (seed 0 is not an eval
 | 5 | plastic_alpha=0.95, plastic_update_freq=1, reg_weight=0.1, stable_alpha=0.98148, stable_update_freq=0.9 | 34.5 | -37.4 |
 | 6 | plastic_alpha=0.99, plastic_update_freq=1, reg_weight=1.25, stable_alpha=0.99, stable_update_freq=0.9 | 33.7 | -28.1 |
 
+## Arxiv-CL — DER (2 configs)
+
+| rank | hyperparameters | A_AUC | AF_s |
+|---|---|---|---|
+| 1 ← | alpha=1 | 40.5 | -28.5 |
+| 2 | alpha=0.5 | 40.2 | -29.3 |
+
+## Arxiv-CL — DER++ (4 configs)
+
+| rank | hyperparameters | A_AUC | AF_s |
+|---|---|---|---|
+| 1 ← | alpha=0.5, beta=0.5 | 38.5 | -34.8 |
+| 2 | alpha=0.5, beta=1 | 37.8 | -36.5 |
+| 3 | alpha=0.2, beta=1 | 37.3 | -34.4 |
+| 4 | alpha=0.2, beta=0.5 | 37.0 | -38.3 |
+
+## Arxiv-CL — LwF-online (3 configs)
+
+| rank | hyperparameters | A_AUC | AF_s |
+|---|---|---|---|
+| 1 ← | T=20, lambda_dist=10, update_every=100 | 41.8 | -44.7 |
+| 2 | T=2, lambda_dist=10, update_every=100 | 39.1 | -36.6 |
+| 3 | T=2, lambda_dist=10, update_every=10 | 24.4 | -53.9 |
+
+## Arxiv-CL — CLS-ER (6 configs)
+
+| rank | hyperparameters | A_AUC | AF_s |
+|---|---|---|---|
+| 1 ← | plastic_alpha=0.99, plastic_update_freq=1, reg_weight=1.25, stable_alpha=0.99, stable_update_freq=0.9 | 37.0 | -29.8 |
+| 2 | plastic_alpha=0.98333, plastic_update_freq=1, reg_weight=1.25, stable_alpha=0.99383, stable_update_freq=0.9 | 36.2 | -28.9 |
+| 3 | plastic_alpha=0.98333, plastic_update_freq=1, reg_weight=0.1, stable_alpha=0.99383, stable_update_freq=0.9 | 36.0 | -30.8 |
+| 4 | plastic_alpha=0.98333, plastic_update_freq=1, reg_weight=1.25, stable_alpha=0.99815, stable_update_freq=0.9 | 34.0 | -20.8 |
+| 5 | plastic_alpha=0.98333, plastic_update_freq=1, reg_weight=0.1, stable_alpha=0.99815, stable_update_freq=0.9 | 33.0 | -23.5 |
+| 6 | plastic_alpha=0.999, plastic_update_freq=0.9, reg_weight=0.1, stable_alpha=0.999, stable_update_freq=0.7 | 29.9 | -15.1 |
+

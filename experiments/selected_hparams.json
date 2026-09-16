@@ -1,5 +1,25 @@
 {
-  "Arxiv-CL": {},
+  "Arxiv-CL": {
+    "clser": {
+      "plastic_alpha": 0.99,
+      "plastic_update_freq": 1.0,
+      "reg_weight": 1.25,
+      "stable_alpha": 0.99,
+      "stable_update_freq": 0.9
+    },
+    "der": {
+      "alpha": 1.0
+    },
+    "derpp": {
+      "alpha": 0.5,
+      "beta": 0.5
+    },
+    "lwf_online": {
+      "T": 20.0,
+      "lambda_dist": 10.0,
+      "update_every": 100.0
+    }
+  },
   "CoraFull-CL": {
     "clser": {
       "plastic_alpha": 0.95,
