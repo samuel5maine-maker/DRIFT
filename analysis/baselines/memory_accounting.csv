@@ -1,0 +1,13 @@
+dataset,backbone,method,buffer_bytes,extra_param_count,extra_param_bytes,total_bytes
+Arxiv-CL,GCN,agem,1600,0,0,1600
+Arxiv-CL,GCN,bare,0,0,0,0
+Arxiv-CL,GCN,dmsg,1600,16513,66052,67652
+Arxiv-CL,GCN,er,1600,0,0,1600
+Arxiv-CL,GCN,er_cbrs,1600,0,0,1600
+Arxiv-CL,GCN,tfmas,0,86016,344064,344064
+CoraFull-CL,GCN,agem,1600,0,0,1600
+CoraFull-CL,GCN,bare,0,0,0,0
+CoraFull-CL,GCN,dmsg,1600,16513,66052,67652
+CoraFull-CL,GCN,er,1600,0,0,1600
+CoraFull-CL,GCN,er_cbrs,1600,0,0,1600
+CoraFull-CL,GCN,tfmas,0,4495360,17981440,17981440

@@ -160,6 +160,18 @@ def plan_jobs(plan, thresholds=None):
         methods = [(m, None) for m in ('bare', 'er', 'agem', 'tfmas', 'dmsg', 'er_cbrs')]
         return [job(r, m, s, dataset=d, method_args=hp) for d, r in (('CoraFull-CL', 'sigma20'), ('Arxiv-CL', 'sigma60'))
                 for m, hp in methods for s in (1, 2, 3)]
+    if plan == 'regimes_t2':
+        """CoraFull-CL under the other transition regimes (spec §2): boundary-local K=5 and 30% global mixing."""
+        import json
+        sel = json.load(open(os.path.join(OUT_ROOT, 'experiments', 'selected_hparams.json')))['CoraFull-CL']
+        combo = {'alpha': sel['derpp']['beta'], 'beta': sel['derpp']['alpha'], 'gamma': sel['clser']['reg_weight'],
+                 'ema_alpha': sel['clser']['stable_alpha'], 'ema_update_freq': sel['clser']['stable_update_freq']}
+        arms = [(m, None) for m in ('bare', 'er', 'agem', 'tfmas', 'dmsg', 'er_cbrs')]
+        arms += [('der', sel['der']), ('derpp', sel['derpp']), ('lwf_online', sel['lwf_online']),
+                 ('clser', sel['clser']), ('dercls', combo)]
+        jobs = [job(r, m, s_, method_args=hp) for r in ('bb5', 'blurry30') for m, hp in arms for s_ in (1, 2, 3)]
+        jobs += [job(r, 'pdgnn', s_, backbone='SGC') for r in ('bb5', 'blurry30') for s_ in (1, 2, 3)]
+        return jobs
     if plan == 'eval_t2':
         """All new methods at seeds 1-3 with the seed-0 selections, plus the ablations the spec requires."""
         import json

@@ -1,0 +1,16 @@
+method,A_AUC,AF_s,source
+Bare,18.5 ± 1.5,-65.4 ± 3.1,paper
+Joint,71.6 ± 1.4,–,paper
+A-GEM,34.1 ± 1.4,-48.6 ± 4.4,paper
+ER,34.9 ± 0.8,-37.3 ± 2.8,paper
+GSS,24.2 ± 3.2,-60.4 ± 5.6,paper
+MAS*,38.4 ± 2.1,-22.2 ± 1.8,paper
+SSM,28.0 ± 4.3,-64.5 ± 1.9,paper
+SEM,26.8 ± 1.0,-59.7 ± 6.9,paper
+DMSG,31.6 ± 0.9,-31.9 ± 2.9,paper
+A-GEM,33.5 ± 1.6 (n=3),-50.3 ± 6.2,reproduced
+Bare,22.2 ± 1.8 (n=3),-63.1 ± 4.9,reproduced
+DMSG,32.3 ± 1.6 (n=3),-29.5 ± 2.5,reproduced
+ER,35.6 ± 1.7 (n=3),-38.0 ± 0.8,reproduced
+ER-CBRS,30.2 ± 1.2 (n=3),-41.7 ± 3.2,new
+MAS*,42.6 ± 1.1 (n=3),-14.3 ± 2.1,reproduced
