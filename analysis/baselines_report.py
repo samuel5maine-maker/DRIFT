@@ -234,6 +234,43 @@ def ema_decomposition(lines):
 
 
 ev_lookup = {}
+REGIME_COLS = [('gaussian_sigma20.0', 'Gaussian σ=20'), ('boundaryblurry_K5_ratio50', 'boundary-local K=5'),
+               ('blurry30', 'global mixing 30%')]
+
+
+def regime_table(ev, lines):
+    """CoraFull-CL across transition regimes (spec §2), one row per method at its selected configuration."""
+    d = ev[(ev.dataset == 'CoraFull-CL') & ev.regime.isin([r for r, _ in REGIME_COLS])]
+    present = [(r, name) for r, name in REGIME_COLS if (d.regime == r).any()]
+    if len(present) < 2:
+        return
+    selected = json.load(open(SELECTED))['CoraFull-CL'] if os.path.exists(SELECTED) else {}
+    combo = None
+    if selected:
+        combo = {'alpha': selected['derpp']['beta'], 'beta': selected['derpp']['alpha'],
+                 'gamma': selected['clser']['reg_weight'], 'ema_alpha': selected['clser']['stable_alpha'],
+                 'ema_update_freq': selected['clser']['stable_update_freq']}
+    wanted = {'der': selected.get('der'), 'derpp': selected.get('derpp'), 'lwf_online': selected.get('lwf_online'),
+              'clser': selected.get('clser'), 'dercls': combo}
+    lines += ['## CoraFull-CL across transition regimes (A_AUC ↑ / AF_s ↑, seeds 1–3)', '',
+              'Each new method at its CoraFull Gaussian selection; the combination with all three terms. '
+              'Non-Gaussian pipelines add evaluation points at task changes, so compare methods within a column, '
+              'not across columns.', '',
+              '| Method | ' + ' | '.join(name for _, name in present) + ' |', '|---|' + '---|' * len(present)]
+    methods = ['bare', 'er', 'agem', 'tfmas', 'dmsg', 'er_cbrs', 'der', 'derpp', 'pdgnn', 'lwf_online', 'clser', 'dercls']
+    for method in methods:
+        rows = d[d.method == method]
+        if wanted.get(method) is not None:
+            target = wanted[method]
+            rows = rows[rows.hp.map(lambda h, m=method: split_hp(h, m) == {k: float(v) for k, v in target.items()})]
+        cells = []
+        for r, _ in present:
+            g = rows[rows.regime == r]
+            cells.append(f"{fmt(g.AAUC.mean(), g.AAUC.std(ddof=1), len(g))} / {fmt(g.AFs.mean(), g.AFs.std(ddof=1), len(g))}"
+                         if len(g) else '–')
+        if any(c != '–' for c in cells):
+            lines.append(f'| {LABEL[method]} | ' + ' | '.join(cells) + ' |')
+    lines.append('')
 
 
 def report():
@@ -289,6 +326,7 @@ def report():
                          f"{int(r.extra_param_bytes):,} | {int(r.total_bytes):,} |")
         lines.append('')
 
+    regime_table(ev, lines)
     for _, r in ev.iterrows():
         ev_lookup[(r['dataset'], r['regime'], r['method'], r['hp'], int(r['seed']))] = r['AAUC']
     ema_decomposition(lines)
