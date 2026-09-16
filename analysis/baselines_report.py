@@ -186,6 +186,56 @@ def coverage_diagnostic(lines):
     lines += ['', '![coverage](coverage_diagnostic.png)', '']
 
 
+def ema_decomposition(lines):
+    """
+    Spec §5.5 ablation, read through the models each EMA method keeps: A_AUC of the model used for inference
+    (CLS-ER: stable EMA; combination: EMA) vs the other models logged at the same evaluation points
+    (telemetry alt_model_accuracy.csv, task = -1 rows are the pooled accuracy DRIFT averages into A_AUC).
+    """
+    rows = []
+    for dataset, regime in MAIN.items():
+        for method in ('clser', 'dercls'):
+            for run_dir in glob.glob(os.path.join(TELEMETRY, dataset, 'GCN', regime, f'{method}_*')):
+                run = os.path.basename(run_dir)
+                hp = split_hp(run[len(method):], method)
+                weight = hp.get('reg_weight', hp.get('gamma'))
+                if method == 'dercls':
+                    variant = 'both' if hp.get('beta', 1) > 0 and hp.get('gamma', 1) > 0 else \
+                        ('beta only (no EMA term)' if hp.get('gamma', 1) == 0 else 'gamma only (no stored logits)')
+                else:
+                    variant = 'with consistency' if weight and weight > 0 else 'consistency removed (reg_weight=0)'
+                for seed_dir in glob.glob(os.path.join(run_dir, 'seed[123]')):
+                    seed = int(os.path.basename(seed_dir)[4:])
+                    res = ev_lookup.get((dataset, regime, method, run[len(method):], seed))
+                    if res is not None:
+                        rows.append({'dataset': dataset, 'method': LABEL[method], 'variant': variant, 'seed': seed,
+                                     'model': 'inference (EMA)', 'AAUC': res})
+                    alt = os.path.join(seed_dir, 'alt_model_accuracy.csv')
+                    if os.path.exists(alt):
+                        a = pd.read_csv(alt)
+                        for model, g in a[a['task'] == -1].groupby('model'):
+                            rows.append({'dataset': dataset, 'method': LABEL[method], 'variant': variant,
+                                         'seed': seed, 'model': model, 'AAUC': 100 * g['accuracy'].mean()})
+    if not rows:
+        return
+    df = pd.DataFrame(rows)
+    piv = df.groupby(['dataset', 'method', 'variant', 'model'])['AAUC'].agg(['mean', 'std', 'count']).reset_index()
+    lines += ['## Where the EMA methods\' gains come from (spec §5.5 / §5.7 ablations)', '',
+              'A_AUC of each model the method keeps, evaluated at the same checkpoints (seeds 1–3). "inference (EMA)" is the '
+              'reported number; "working" is the trained network. If removing the consistency term leaves the EMA number '
+              'unchanged, the gain comes from evaluating an averaged model, not from the regulariser.', '',
+              '| dataset | method | variant | model | A_AUC | n |', '|---|---|---|---|---|---|']
+    order = {'inference (EMA)': 0, 'plastic': 1, 'working': 2, 'ema': 3}
+    for _, r in piv.sort_values(['dataset', 'method', 'variant', 'model'],
+                                key=lambda c: c.map(order) if c.name == 'model' else c).iterrows():
+        lines.append(f"| {r.dataset} | {r.method} | {r.variant} | {r.model} | {fmt(r['mean'], r['std'], int(r['count']))} "
+                     f"| {int(r['count'])} |")
+    lines.append('')
+
+
+ev_lookup = {}
+
+
 def report():
     df = load()
     ev = df[df['seed'].isin([1, 2, 3])]
@@ -239,6 +289,9 @@ def report():
                          f"{int(r.extra_param_bytes):,} | {int(r.total_bytes):,} |")
         lines.append('')
 
+    for _, r in ev.iterrows():
+        ev_lookup[(r['dataset'], r['regime'], r['method'], r['hp'], int(r['seed']))] = r['AAUC']
+    ema_decomposition(lines)
     coverage_diagnostic(lines)
     with open(os.path.join(OUT, 'results.md'), 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines) + '\n')
