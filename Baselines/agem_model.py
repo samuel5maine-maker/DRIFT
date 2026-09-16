@@ -313,7 +313,8 @@ class NET(nn.Module):
                 # Update aux graph using full graph
                 self._update_aux_graph(args, labels)
 
-    def _update_aux_graph(self, args, labels):
+    def _update_aux_graph(self, args, labels=None):
+        # `labels` is unused; observe() (the tfo / tfo_blurry path) calls this without it and crashed
         """Update the auxiliary graph for buffer samples using the full graph"""
         if len(self.buffer_node_ids) == 0:
             return
