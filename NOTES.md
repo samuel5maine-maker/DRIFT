@@ -295,3 +295,5 @@ The protocol:
 - Hyperparameters were selected on a single seed.
 - LwF-online's Arxiv grid was reduced to the best three CoraFull configurations.
 - AF_s rewards underfitting. The low-forgetting rows (MAS* on Arxiv, the CLS-ER repo-default config at AF_s −4.5 on CoraFull) should be read with their A_AUC.
+
+⚠ **A-GEM could not run under global mixing** [run, code]. `agem_model.observe()`, used by the `tfo`/`tfo_blurry` pipelines, calls `_update_aux_graph(args)`, but the method required a `labels` argument, so every run raised `TypeError`. The argument is unused, and it is now optional. DRIFT reports A-GEM under global mixing, so the released code differs from what produced those numbers here.
