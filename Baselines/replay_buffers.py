@@ -125,9 +125,47 @@ class CBRSBuffer(_SlotBuffer):
         self._refresh_full()
 
 
+class DegreeCBRSBuffer(_SlotBuffer):
+    """Class-balanced memory retaining higher-degree delivered exemplars."""
+    def __init__(self, budget):
+        super().__init__(budget)
+        self.scores = []
+
+    def _write_scored(self, slot, node_id, label, score, payload):
+        extending = slot == len(self.ids)
+        self._write(slot, node_id, label, payload)
+        if extending:
+            self.scores.append(float(score))
+        else:
+            self.scores[slot] = float(score)
+
+    def add(self, node_id, label, score=0.0, **payload):
+        if len(self) < self.budget:
+            self._write_scored(len(self), node_id, label, score, payload)
+            return
+        counts = self.class_counts()
+        largest_count = max(counts.values())
+        label_count = counts.get(label, 0)
+        if label_count < largest_count:
+            largest = {class_id for class_id, count in counts.items() if count == largest_count}
+            candidates = [index for index, value in enumerate(self.labels) if value in largest]
+        else:
+            candidates = [index for index, value in enumerate(self.labels) if value == label]
+        if not candidates:
+            return
+        slot = min(candidates, key=lambda index: self.scores[index])
+        if label_count < largest_count or float(score) > self.scores[slot]:
+            self._write_scored(slot, node_id, label, score, payload)
+
+    def nbytes(self):
+        return super().nbytes() + 8 * len(self.scores)
+
+
 def make_buffer(kind, budget):
     if kind == 'reservoir':
         return ReservoirBuffer(budget)
     if kind == 'cbrs':
         return CBRSBuffer(budget)
-    raise ValueError(f'unknown buffer kind {kind!r} (reservoir | cbrs)')
+    if kind == 'degree_cbrs':
+        return DegreeCBRSBuffer(budget)
+    raise ValueError(f'unknown buffer kind {kind!r} (reservoir | cbrs | degree_cbrs)')
