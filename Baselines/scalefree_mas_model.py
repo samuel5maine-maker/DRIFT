@@ -28,6 +28,10 @@ class NET(MASGeometryNET):
     def __init__(self, model, args, dataset=None):
         super().__init__(model, args, dataset)
         hp = getattr(args, 'mas_geometry_args', {}) or {}
+        allowed = {'project_classifier', 'ema_alpha', 'eval_working_weight', 'monitor_task_loss'}
+        unknown = set(hp) - allowed
+        if unknown:
+            raise ValueError('unsupported mas_geometry_args: ' + ', '.join(sorted(unknown)))
         self.monitor_task_loss = bool(hp.get('monitor_task_loss', True))
         self.consolidation_steps = []
         self.monitored_losses = []

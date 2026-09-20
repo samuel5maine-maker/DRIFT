@@ -60,14 +60,14 @@ def main():
         enabled = arm == 'scalefree'
 
         def build(model, learner_args, dataset=None):
-            learner_args.mas_geometry_args['scalefree_enabled'] = enabled
+            learner_args.mas_geometry_args['monitor_task_loss'] = enabled
             learner = NET(model, learner_args, dataset=dataset)
             traces['learner'] = learner
             return learner
 
         benchmark.MASGeometryNET = build
         config = {'name': f'h32_{arm}', 'learner': 'mas_geometry',
-                  'project_classifier': False, 'scalefree_enabled': enabled}
+                  'project_classifier': False, 'monitor_task_loss': enabled}
         for sigma in sigmas:
             print(f'[start] {cli.dataset} {arm} seed={cli.seed} sigma={sigma:g} rep={cli.replicate}', flush=True)
             result = benchmark.run_one((dataset, task_train, merged, mapping),
