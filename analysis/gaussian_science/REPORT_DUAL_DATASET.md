@@ -6,6 +6,8 @@
 
 **Goal:** exceed 42.75 A_AUC and improve AF_s above -13.46 without increasing the DRIFT replay budget or training passes
 
+**Model explanation:** [`MODEL_GUIDE.md`](MODEL_GUIDE.md) describes the CoraFull H23 and Arxiv H26 learning rules, equations, persistent state, inference behavior, pseudocode, fairness constraints, and the post-test H27 research candidate.
+
 ## Result
 
 The accuracy target was beaten on CoraFull, but no frozen configuration beat both targets on both datasets.
