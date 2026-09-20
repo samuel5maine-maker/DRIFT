@@ -1,5 +1,7 @@
 # Scientific report: CoraFull Gaussian mixing experiments
 
+> The follow-up CoraFull and Arxiv study, including frozen test results, is in [REPORT_DUAL_DATASET.md](REPORT_DUAL_DATASET.md).
+
 **Branch:** `Codex/gaussian-scientific-50`
 
 **Selection data:** CoraFull-CL validation split only

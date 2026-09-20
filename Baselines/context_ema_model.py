@@ -75,6 +75,9 @@ class NET(ReplayNET):
         'ace': False,
         'balanced_softmax': False,
         'smoothness_weight': 0.0,
+        'head_lr_multiplier': 1.0,
+        'sync_new_class_rows': False,
+        'project_ema_classifier': False,
     }
     _ALLOWED = frozenset(DEFAULTS)
 
@@ -113,6 +116,12 @@ class NET(ReplayNET):
         self.smoothness_weight = float(self.hp['smoothness_weight'])
         if self.smoothness_weight < 0:
             raise ValueError('smoothness_weight must be non-negative')
+        self.head_lr_multiplier = float(self.hp['head_lr_multiplier'])
+        if self.head_lr_multiplier <= 0:
+            raise ValueError('head_lr_multiplier must be positive')
+        self.sync_new_class_rows = float(self.hp['sync_new_class_rows'])
+        if not 0 <= self.sync_new_class_rows <= 1:
+            raise ValueError('sync_new_class_rows must be in [0, 1]')
         if self.hp['replay_neighbors'] not in ('sampled', 'full'):
             raise ValueError("replay_neighbors must be 'sampled' or 'full'")
         if self.hp['classifier'] not in ('linear', 'cosine'):
@@ -120,6 +129,15 @@ class NET(ReplayNET):
         self.cosine_scale = float(self.hp['cosine_scale'])
         if self.cosine_scale <= 0:
             raise ValueError('cosine_scale must be positive')
+
+        if self.head_lr_multiplier != 1:
+            head_parameters = list(self.net.gat_layers[-1].parameters())
+            head_ids = {id(parameter) for parameter in head_parameters}
+            encoder_parameters = [parameter for parameter in self.net.parameters() if id(parameter) not in head_ids]
+            self.opt = torch.optim.Adam([
+                {'params': encoder_parameters, 'lr': args.lr},
+                {'params': head_parameters, 'lr': args.lr * self.head_lr_multiplier},
+            ], lr=args.lr, weight_decay=args.weight_decay)
 
         self.ema = copy.deepcopy(self.net).requires_grad_(False)
         self._ema_initialized = False
@@ -132,6 +150,8 @@ class NET(ReplayNET):
         self._previous_labels = None
         self.ema_alphas = []
         self.class_observation_counts = {}
+        self.class_last_seen = {}
+        self._ema_seen_classes = set()
         final_weight = self.net.gat_layers[-1].linear.weight
         self._classifier_target_norm = float(final_weight.detach().norm(dim=1).mean())
         self._ema_eval = _CosineEval(self.ema, self.cosine_scale) if self.hp['classifier'] == 'cosine' else self.ema
@@ -157,6 +177,7 @@ class NET(ReplayNET):
             'extra_param_count': params,
             'extra_param_bytes': param_bytes,
             'class_counter_bytes': 8 * len(self.class_observation_counts),
+            'class_recency_bytes': 8 * len(self.class_last_seen),
         }
 
     def compute_accounting(self):
@@ -170,11 +191,13 @@ class NET(ReplayNET):
     @torch.no_grad()
     def _update_ema(self, current_labels):
         current = set(int(value) for value in current_labels.detach().cpu().unique().tolist())
+        new_classes = current - self._ema_seen_classes
         if not self._ema_initialized:
             for target, source in zip(self.ema.parameters(), self.net.parameters()):
                 target.copy_(source)
             self._ema_initialized = True
             self._previous_labels = current
+            self._ema_seen_classes.update(current)
             self.ema_alphas.append(0.0)
             return
         alpha = self.ema_alpha
@@ -183,6 +206,19 @@ class NET(ReplayNET):
             alpha = self.ema_fast + (self.ema_alpha - self.ema_fast) * overlap
         for target, source in zip(self.ema.parameters(), self.net.parameters()):
             target.mul_(alpha).add_(source, alpha=1 - alpha)
+        if self.sync_new_class_rows and new_classes:
+            ema_head = self.ema.gat_layers[-1].linear
+            working_head = self.net.gat_layers[-1].linear
+            rows = torch.tensor(sorted(new_classes), dtype=torch.long, device=working_head.weight.device)
+            ema_rows = ema_head.weight.index_select(0, rows)
+            working_rows = working_head.weight.index_select(0, rows)
+            ema_head.weight.index_copy_(0, rows, torch.lerp(ema_rows, working_rows, self.sync_new_class_rows))
+            if working_head.bias is not None:
+                ema_bias = ema_head.bias.index_select(0, rows)
+                working_bias = working_head.bias.index_select(0, rows)
+                ema_head.bias.index_copy_(0, rows, torch.lerp(ema_bias, working_bias, self.sync_new_class_rows))
+        self._project_ema_classifier()
+        self._ema_seen_classes.update(current)
         self._previous_labels = current
         self.ema_alphas.append(alpha)
 
@@ -230,6 +266,14 @@ class NET(ReplayNET):
         target = norms.mean() if self.hp['classifier_norm'] == 'mean' else self._classifier_target_norm * self.classifier_norm_scale
         weight.mul_(target / norms)
 
+    @torch.no_grad()
+    def _project_ema_classifier(self):
+        if not self.hp['project_ema_classifier']:
+            return
+        weight = self.ema.gat_layers[-1].linear.weight
+        norms = weight.norm(dim=1, keepdim=True).clamp_min(1e-12)
+        weight.mul_(self._classifier_target_norm / norms)
+
     def _step(self, args, g, labels, train_ids, cis):
         self.net.train()
         device = next(self.net.parameters()).device
@@ -241,6 +285,7 @@ class NET(ReplayNET):
         for value in incoming_labels.detach().cpu().tolist():
             value = int(value)
             self.class_observation_counts[value] = self.class_observation_counts.get(value, 0) + 1
+            self.class_last_seen[value] = self.optimizer_steps + 1
 
         self.opt.zero_grad()
         stream_blocks = self._stream_blocks(args, g, train_ids)
