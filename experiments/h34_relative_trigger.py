@@ -1,4 +1,4 @@
-"""Predeclared H33 three-arm experiments; reuse the existing DRIFT evaluator."""
+"""Predeclared H34 experiments: the H33 hybrid with a scale-free consolidation trigger."""
 from __future__ import annotations
 
 import argparse
@@ -18,7 +18,9 @@ from Baselines.hybrid_model import NET
 from experiments import scientific_gaussian as benchmark
 
 SIGMAS = {'CoraFull-CL': (3., 10., 20.), 'Arxiv-CL': (60.,)}
-ARMS = {'hybrid': (True, True), 'replay_only': (True, False), 'mas_only': (False, True)}
+ARMS = {'hybrid_absolute': (True, True, 'absolute'),
+        'hybrid_relative': (True, True, 'relative'),
+        'mas_relative': (False, True, 'relative')}
 
 
 def main():
@@ -31,11 +33,11 @@ def main():
     parser.add_argument('--arms', nargs='+', choices=ARMS, default=list(ARMS))
     parser.add_argument('--replicate', type=str, default='r1')
     parser.add_argument('--traces', action='store_true', help='store per-step loss traces')
-    parser.add_argument('--output-root', type=Path, default=ROOT / 'results_h33')
+    parser.add_argument('--output-root', type=Path, default=ROOT / 'results_h34')
     parser.add_argument('--device', choices=('cuda', 'cpu'), default='cuda')
     cli = parser.parse_args()
     if cli.partition == 'test':
-        raise RuntimeError('H33 confirmation is locked until the validation decision and source freeze.')
+        raise RuntimeError('H34 confirmation is locked until the validation decision and source freeze.')
     if cli.device == 'cuda' and not torch.cuda.is_available():
         raise RuntimeError('CUDA unavailable')
     sigmas = cli.sigmas or SIGMAS[cli.dataset]
@@ -58,18 +60,20 @@ def main():
     traces = {}
     results = []
     for arm in arms:
-        replay_on, mas_on = ARMS[arm]
+        replay_on, mas_on, trigger = ARMS[arm]
 
         def build(model, learner_args, dataset=None):
-            learner_args.hybrid_args = {'replay_enabled': replay_on, 'mas_enabled': mas_on, 'buffer': 'cbrs'}
+            learner_args.hybrid_args = {'replay_enabled': replay_on, 'mas_enabled': mas_on,
+                                        'buffer': 'cbrs', 'trigger': trigger}
             learner_args.mas_geometry_args['monitor_task_loss'] = True
             learner = NET(model, learner_args, dataset=dataset)
             traces['learner'] = learner
             return learner
 
         benchmark.NET = build
-        config = {'name': f'h33_{arm}', 'learner': 'hybrid', 'project_classifier': False,
+        config = {'name': f'h34_{arm}', 'learner': 'hybrid', 'project_classifier': False,
                   'replay_enabled': replay_on, 'mas_enabled': mas_on, 'buffer': 'cbrs',
+                  'trigger': trigger,
                   'replay': 'context', 'inference': 'working', 'monitor_task_loss': True}
         for sigma in sigmas:
             print(f'[start] {cli.dataset} {arm} seed={cli.seed} sigma={sigma:g} rep={cli.replicate}', flush=True)
@@ -87,7 +91,7 @@ def main():
     summary = {'dataset': cli.dataset, 'seed': cli.seed, 'stream_seed': cli.stream_seed,
                'replicate': cli.replicate, 'sigmas': sigmas, 'arms': {}}
     for arm in arms:
-        subset = [r for r in results if r['spec']['config']['name'] == f'h33_{arm}']
+        subset = [r for r in results if r['spec']['config']['name'] == f'h34_{arm}']
         summary['arms'][arm] = {key: float(np.mean([r['metrics'][key] for r in subset]))
                                 for key in subset[0]['metrics']}
         summary['arms'][arm]['consolidations'] = float(np.mean(

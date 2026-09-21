@@ -18,6 +18,7 @@ switch off one mechanism each, giving the two single-mechanism control arms.
 """
 
 import dgl
+import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -30,12 +31,15 @@ class NET(UnlatchedMAS):
 
     def __init__(self, model, args, dataset=None):
         hybrid = dict(getattr(args, 'hybrid_args', {}) or {})
-        unknown = set(hybrid) - {'replay_enabled', 'mas_enabled', 'buffer'}
+        unknown = set(hybrid) - {'replay_enabled', 'mas_enabled', 'buffer', 'trigger'}
         if unknown:
             raise ValueError('unsupported hybrid_args: ' + ', '.join(sorted(unknown)))
         super().__init__(model, args, dataset)
         self.replay_enabled = bool(hybrid.get('replay_enabled', True))
         self.mas_enabled = bool(hybrid.get('mas_enabled', True))
+        self.trigger = str(hybrid.get('trigger', 'absolute'))
+        if self.trigger not in ('absolute', 'relative'):
+            raise ValueError("trigger must be 'absolute' or 'relative'")
         self.buffer = make_buffer(str(hybrid.get('buffer', 'cbrs')), self.BUDGET)
         self.replay_rows = int(args.batch_size)  # DRIFT's 1:1 replay ratio
         self.replay_rows_per_update = []
@@ -58,6 +62,7 @@ class NET(UnlatchedMAS):
             'replay_edges': self.replay_edges,
             'replay_enabled': self.replay_enabled,
             'mas_enabled': self.mas_enabled,
+            'trigger': self.trigger,
         })
         return accounting
 
@@ -71,6 +76,20 @@ class NET(UnlatchedMAS):
         original = g.ndata['_ID'].detach().cpu().tolist()
         self._orig_to_local = {int(nid): i for i, nid in enumerate(original)}
         self._training_graph = g
+
+    @staticmethod
+    def relative_plateau(mean, variance, past_means, past_variances):
+        """Scale-free form of DRIFT's two plateau conditions (H34).
+
+        DRIFT fires when the window mean is under 0.2 and its variance under 0.1, which
+        are levels in loss units.  How often those levels are reached depends on how
+        confident the network happens to be, so class-balanced replay silenced the
+        detector on Arxiv (H33).  Here "low" and "flat" are judged against the stream's
+        own history: the window mean and variance must each be at or below the median of
+        every window so far, including this one.  No constant is involved.
+        """
+        return (mean <= float(np.median(past_means + [mean]))
+                and variance <= float(np.median(past_variances + [variance])))
 
     def _consolidate(self, blocks, input_features, offset1, offset2):
         """DRIFT's importance estimate and anchor copy, unchanged."""
@@ -163,7 +182,11 @@ class NET(UnlatchedMAS):
         if not self.new_peak_detected and \
                 self.loss_window_mean > self.last_loss_window_mean + self.last_loss_window_variance ** 0.5:
             self.new_peak_detected = True
-        plateau = (self.loss_window_mean < 0.2 and self.loss_window_variance < 0.1)
+        if self.trigger == 'relative':
+            plateau = self.relative_plateau(self.loss_window_mean, self.loss_window_variance,
+                                            self.loss_window_means, self.loss_window_variances)
+        else:
+            plateau = (self.loss_window_mean < 0.2 and self.loss_window_variance < 0.1)
         if self.mas_enabled and self.new_peak_detected and plateau:
             self._consolidate(blocks, input_features, offset1, offset2)
 

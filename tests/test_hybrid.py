@@ -87,6 +87,37 @@ class TestHybrid(unittest.TestCase):
         self.assertTrue(moved)
         self.assertEqual(net.replay_rows_per_update[-1], args.batch_size)
 
+    def test_relative_trigger_is_scale_free(self):
+        rng = np.random.RandomState(3)
+        means = list(rng.gamma(2.0, 1.0, size=200))
+        variances = list(rng.gamma(1.0, 0.5, size=200))
+        for index in range(20, 200, 7):
+            base = hybrid_model.NET.relative_plateau(
+                means[index], variances[index], means[:index], variances[:index])
+            for k in (0.01, 3.0, 250.0):
+                scaled = hybrid_model.NET.relative_plateau(
+                    k * means[index], k * k * variances[index],
+                    [k * m for m in means[:index]], [k * k * v for v in variances[:index]])
+                self.assertEqual(base, scaled)
+
+    def test_relative_trigger_fires_where_the_absolute_one_cannot(self):
+        warm_up()
+        absolute, args_a, data_a = build(hybrid_model, trigger='absolute')
+        g_a = pipeline_graph(data_a)
+        steps_on(absolute, args_a, g_a, 60)
+        relative, args_b, data_b = build(hybrid_model, trigger='relative')
+        g_b = pipeline_graph(data_b)
+        steps_on(relative, args_b, g_b, 60)
+        self.assertGreater(relative.count_updates, absolute.count_updates)
+        self.assertEqual(relative.optimizer_steps, absolute.optimizer_steps)
+        self.assertEqual(relative.replay_rows_per_update, absolute.replay_rows_per_update)
+
+    def test_default_trigger_is_the_released_absolute_rule(self):
+        net, _, _ = build(hybrid_model)
+        self.assertEqual(net.trigger, 'absolute')
+        with self.assertRaises(ValueError):
+            build(hybrid_model, trigger='median')
+
     def test_unknown_arguments_are_rejected(self):
         with self.assertRaises(ValueError):
             build(hybrid_model, replay_enabled=True, buffer_size=1000)
