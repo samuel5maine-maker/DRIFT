@@ -487,6 +487,15 @@ def run_one(prepared, eval_data, args, config, sigma, seed, output, fingerprint)
             'no_replay_buffer': memory['buffer_bytes'] == 0,
             'no_replay_rows': replay_rows == [],
         })
+    elif config.get('learner') == 'hybrid':
+        n_params = sum(p.numel() for p in model.parameters())
+        replay_on = config.get('replay_enabled', True)
+        assertions.update({
+            'replay_schedule': replay_rows == ([0] + [10] * (total - 1) if replay_on else [0] * total),
+            'buffer_exactly_100': len(learner.buffer) == (100 if replay_on else 0),
+            'buffer_storage_bounded': memory['buffer_bytes'] <= 2400,
+            'mas_state_at_most_two_copies': memory['extra_param_count'] <= 2 * n_params,
+        })
     else:
         assertions.update({
             'replay_schedule': replay_rows == [0] + [10] * (total - 1),
