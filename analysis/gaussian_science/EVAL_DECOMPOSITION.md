@@ -4,7 +4,7 @@
 
 ## Summary
 
-DRIFT scores latent task *t* only over classes 0 … max(classes of tasks ≤ *t*), at every checkpoint including the last, on task *t*'s own evaluation subgraph (`pipeline.eval_tasks_cis`). Classes arrive in index order, so that prefix deletes every class that arrived after task *t*: the evaluator hands the model part of the task identity. A network whose logits are ordered by recency finds task *t*'s own pair at the top of the prefix without knowing anything else.
+DRIFT scores latent task *t* only over classes 0 … max(classes of tasks ≤ *t*), at every checkpoint including the last, on task *t*'s own evaluation subgraph (`pipeline.eval_tasks_cis`). Classes arri ve in index order, so that prefix deletes every class that arrived after task *t*: the evaluator hands the model part of the task identity. A network whose logits are ordered by recency finds task *t*'s own pair at the top of the prefix without knowing anything else.
 
 Three measurements show this dominates the metric:
 
