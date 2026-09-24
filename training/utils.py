@@ -141,6 +141,10 @@ def result_name(args):
         name += '_clsincre'
     if args.time_streaming:
         name += f'_timestream{args.n_time_tasks}'
+    if getattr(args, 'eval_protocol', 'legacy') != 'legacy':
+        # keep the historical filenames for legacy-protocol runs; scores under a different
+        # evaluation rule must not land on top of them
+        name += f'_eval{args.eval_protocol}'
     return name + method_suffix(args) + f'_seed{args.seed}'
 
 

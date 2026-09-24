@@ -378,28 +378,72 @@ def eval_tasks(model, continuum, tasks_te, cur_t, args):
     return result, total_pred * 1.0 / total_size, current_result, current_avg_acc
 
 
+def _eval_subgraphs(continuum, args):
+    return continuum if args.setting in ['tfo_bb', 'tfo_gaussian'] else continuum.graphs
+
+
+def _delivered_classes(subgraphs, tasks_te, last_t):
+    """Class labels the stream has delivered through task `last_t`, read from those tasks' test labels."""
+    seen = set()
+    for t in range(last_t + 1):
+        labels = subgraphs[t].dstdata['label'].squeeze()
+        seen.update(int(c) for c in labels[tasks_te[t]].unique())
+    return seen
+
+
+def _common_head(subgraphs, tasks_te, last_t, args):
+    """Width of the single output head shared by every graded task: every class index up to the largest
+    delivered one, rounded up to a whole task's worth of classes (DRIFT's even-offset convention when
+    n_cls_per_task=2)."""
+    per_task = int(getattr(args, 'n_cls_per_task', 2) or 2)
+    top = max(_delivered_classes(subgraphs, tasks_te, last_t)) + 1
+    if top % per_task:
+        top += per_task - (top % per_task)
+    return top
+
+
+def _legacy_head(cls_seen_so_far):
+    """DRIFT's original per-task cutoff: classes of tasks up to the one being graded."""
+    offset2 = max(cls_seen_so_far) + 1
+    return offset2 + (offset2 % 2)
+
+
 def eval_tasks_cis(model, continuum, tasks_te, cur_t, args):
+    """Class-IL evaluation, under one of two protocols (`--eval_protocol`).
+
+    'common_head' (default): grade only tasks 0..cur_t, the ones the stream has delivered, and give each
+    of them the *same* output head -- every class delivered so far. Undelivered tasks are not graded;
+    they score nan and are excluded from the pooled accuracy.
+
+    'legacy': DRIFT's original rule, kept so old numbers stay reproducible. Every task is graded, and
+    task t may only predict classes belonging to tasks 0..t, whatever the training step. That hands the
+    model part of the task identity; see analysis/gaussian_science/EVAL_DECOMPOSITION.md.
+    """
     model.eval()
-    cls_seen_so_far = set()
-    result = [] # acc for each task
+    subgraphs = _eval_subgraphs(continuum, args)
+    legacy = getattr(args, 'eval_protocol', 'common_head') == 'legacy'
+    n_tasks = len(tasks_te)
+    last_t = n_tasks - 1 if legacy else max(0, min(int(cur_t), n_tasks - 1))
+
+    result = [float('nan')] * n_tasks   # acc for each task; nan = not delivered, so not graded
     total_size = 0
     total_pred = 0
     current_result = [] # result til current task
     current_avg_acc = 0 # avg acc til current task
-    if args.setting in ['tfo_bb', 'tfo_gaussian']:
-        subgraphs = continuum
-    else:
-        subgraphs = continuum.graphs
-    for i, task_te in enumerate(tasks_te):
-        t = i
+    cls_seen_so_far = set()
+    head = None if legacy else _common_head(subgraphs, tasks_te, last_t, args)
+
+    for t in range(last_t + 1):
+        task_te = tasks_te[t]
         subgraph = subgraphs[t]
         if args.cuda:
             subgraph = subgraph.to(device='cuda:{}'.format(args.gpu))
         features, labels = subgraph.srcdata['feat'], subgraph.dstdata['label'].squeeze()
-        cls_seen_so_far.update(labels[task_te].unique()) # update the classes (in test set) seen so far
-        offset1, offset2 = 0, max(cls_seen_so_far)+1
-        if offset2 % 2 != 0:
-            offset2 += 1
+        if legacy:
+            cls_seen_so_far.update(labels[task_te].unique()) # update the classes (in test set) seen so far
+            offset1, offset2 = 0, _legacy_head(cls_seen_so_far)
+        else:
+            offset1, offset2 = 0, head
         with torch.no_grad():
             output, _ = model(subgraph, features)
             logits = output[task_te][:, offset1:offset2]
@@ -407,18 +451,22 @@ def eval_tasks_cis(model, continuum, tasks_te, cur_t, args):
             _, indices = torch.max(logits, dim=1)
             correct = torch.sum(indices == labels)
             accuracy =  correct.item() * 1.0 / len(labels)
-            result.append(accuracy)
+            result[t] = accuracy
             total_size += len(labels)
             total_pred += correct.item()
-        
-        if t == cur_t:
-            current_result = [res for res in result]
+
+        if legacy and t == cur_t:
+            current_result = [res for res in result[:t + 1]]
             current_avg_acc = total_pred * 1.0 / total_size
             print(f'acc till {t}: {current_avg_acc}')
-        
-    # torch.save((model.state_dict(), current_result, current_avg_acc), args.method + '.pt')
-    
-    return result, total_pred * 1.0 / total_size, current_result, current_avg_acc
+
+    avg_acc = total_pred * 1.0 / total_size
+    if not legacy:
+        current_result = result[:last_t + 1]
+        current_avg_acc = avg_acc
+        print(f'acc till {last_t}: {current_avg_acc}')
+
+    return result, avg_acc, current_result, current_avg_acc
 
 def eval_tasks_batch(model, continuum, tasks_te, cur_t, args):
     model.eval()
@@ -480,18 +528,20 @@ def eval_tasks_batch(model, continuum, tasks_te, cur_t, args):
 
 
 def eval_tasks_cis_batch(model, continuum, tasks_te, cur_t, args):
+    """Minibatch version of eval_tasks_cis; same two protocols (see that function)."""
     model.eval()
+    subgraphs = _eval_subgraphs(continuum, args)
+    legacy = getattr(args, 'eval_protocol', 'common_head') == 'legacy'
+    n_tasks = len(tasks_te)
+    last_t = n_tasks - 1 if legacy else max(0, min(int(cur_t), n_tasks - 1))
+
     cls_seen_so_far = set()
-    result = []
+    result = [float('nan')] * n_tasks   # nan = not delivered, so not graded
     total_size = 0
     total_pred = 0
     current_result = []
     current_avg_acc = 0
-
-    if args.setting in ['tfo_bb', 'tfo_gaussian']:
-        subgraphs = continuum
-    else:
-        subgraphs = continuum.graphs
+    head = None if legacy else _common_head(subgraphs, tasks_te, last_t, args)
 
     sampler = dgl.dataloading.NeighborSampler(
         args.n_nbs_sample
@@ -501,16 +551,18 @@ def eval_tasks_cis_batch(model, continuum, tasks_te, cur_t, args):
     )
     bs = args.batch_size
 
-    for t, task_te in enumerate(tasks_te):
+    for t in range(last_t + 1):
+        task_te = tasks_te[t]
         g = subgraphs[t]
         if args.cuda:
             g = g.to(device='cuda:{}'.format(args.gpu))
         labels = g.dstdata['label'].squeeze()
 
-        cls_seen_so_far.update(labels[task_te].unique())
-        offset1, offset2 = 0, max(cls_seen_so_far) + 1
-        if offset2 % 2 != 0:
-            offset2 += 1
+        if legacy:
+            cls_seen_so_far.update(labels[task_te].unique())
+            offset1, offset2 = 0, _legacy_head(cls_seen_so_far)
+        else:
+            offset1, offset2 = 0, head
 
         correct_t = 0
         total_t = 0
@@ -530,18 +582,23 @@ def eval_tasks_cis_batch(model, continuum, tasks_te, cur_t, args):
                 correct_t += (pred == batch_labels).sum().item()
                 total_t += len(batch_labels)
 
-        acc = correct_t / total_t
-        result.append(acc)
+        result[t] = correct_t / total_t
 
         total_pred += correct_t
         total_size += total_t
 
-        if t == cur_t:
-            current_result = [res for res in result]
+        if legacy and t == cur_t:
+            current_result = [res for res in result[:t + 1]]
             current_avg_acc = total_pred / total_size
             print(f'acc till {t}: {current_avg_acc}')
 
-    return result, total_pred / total_size, current_result, current_avg_acc
+    avg_acc = total_pred / total_size
+    if not legacy:
+        current_result = result[:last_t + 1]
+        current_avg_acc = avg_acc
+        print(f'acc till {last_t}: {current_avg_acc}')
+
+    return result, avg_acc, current_result, current_avg_acc
 
 
 def pipeline_tfo(dataset, continuum, tasks_te, args):
