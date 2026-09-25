@@ -378,47 +378,65 @@ def eval_tasks(model, continuum, tasks_te, cur_t, args):
     return result, total_pred * 1.0 / total_size, current_result, current_avg_acc
 
 
+def _eval_subgraphs(continuum, args):
+    return continuum if args.setting in ['tfo_bb', 'tfo_gaussian'] else continuum.graphs
+
+
+def _delivered_classes(subgraphs, tasks_te, last_t):
+    """Class labels the stream has delivered through task `last_t`, read from those tasks' test labels."""
+    seen = set()
+    for t in range(last_t + 1):
+        labels = subgraphs[t].dstdata['label'].squeeze()
+        seen.update(int(c) for c in labels[tasks_te[t]].unique())
+    return seen
+
+
+def _common_head(subgraphs, tasks_te, last_t):
+    """Width of the single output head shared by every graded task: every class index up to the
+    largest one the stream has delivered."""
+    return max(_delivered_classes(subgraphs, tasks_te, last_t)) + 1
+
+
 def eval_tasks_cis(model, continuum, tasks_te, cur_t, args):
+    """Class-IL evaluation.
+
+    Grade only tasks 0..cur_t, the ones the stream has delivered, and give each of them the *same*
+    output head: every class delivered so far, so a prediction may land on any learned class.
+    Undelivered tasks are not graded; they score nan and are excluded from the pooled accuracy.
+
+    This replaces DRIFT's original rule, under which every task was graded at every checkpoint and
+    task t could only predict classes belonging to tasks 0..t -- which handed the model part of the
+    task identity. See analysis/gaussian_science/EVAL_DECOMPOSITION.md.
+    """
     model.eval()
-    cls_seen_so_far = set()
-    result = [] # acc for each task
+    subgraphs = _eval_subgraphs(continuum, args)
+    n_tasks = len(tasks_te)
+    last_t = max(0, min(int(cur_t), n_tasks - 1))
+
+    result = [float('nan')] * n_tasks   # acc for each task; nan = not delivered, so not graded
     total_size = 0
     total_pred = 0
-    current_result = [] # result til current task
-    current_avg_acc = 0 # avg acc til current task
-    if args.setting in ['tfo_bb', 'tfo_gaussian']:
-        subgraphs = continuum
-    else:
-        subgraphs = continuum.graphs
-    for i, task_te in enumerate(tasks_te):
-        t = i
+    head = _common_head(subgraphs, tasks_te, last_t)
+
+    for t in range(last_t + 1):
+        task_te = tasks_te[t]
         subgraph = subgraphs[t]
         if args.cuda:
             subgraph = subgraph.to(device='cuda:{}'.format(args.gpu))
         features, labels = subgraph.srcdata['feat'], subgraph.dstdata['label'].squeeze()
-        cls_seen_so_far.update(labels[task_te].unique()) # update the classes (in test set) seen so far
-        offset1, offset2 = 0, max(cls_seen_so_far)+1
-        if offset2 % 2 != 0:
-            offset2 += 1
         with torch.no_grad():
             output, _ = model(subgraph, features)
-            logits = output[task_te][:, offset1:offset2]
+            logits = output[task_te][:, 0:head]
             labels = labels[task_te]
             _, indices = torch.max(logits, dim=1)
             correct = torch.sum(indices == labels)
-            accuracy =  correct.item() * 1.0 / len(labels)
-            result.append(accuracy)
+            result[t] = correct.item() * 1.0 / len(labels)
             total_size += len(labels)
             total_pred += correct.item()
-        
-        if t == cur_t:
-            current_result = [res for res in result]
-            current_avg_acc = total_pred * 1.0 / total_size
-            print(f'acc till {t}: {current_avg_acc}')
-        
-    # torch.save((model.state_dict(), current_result, current_avg_acc), args.method + '.pt')
-    
-    return result, total_pred * 1.0 / total_size, current_result, current_avg_acc
+
+    avg_acc = total_pred * 1.0 / total_size
+    print(f'acc till {last_t}: {avg_acc}')
+    return result, avg_acc, result[:last_t + 1], avg_acc
 
 def eval_tasks_batch(model, continuum, tasks_te, cur_t, args):
     model.eval()
@@ -480,18 +498,16 @@ def eval_tasks_batch(model, continuum, tasks_te, cur_t, args):
 
 
 def eval_tasks_cis_batch(model, continuum, tasks_te, cur_t, args):
+    """Minibatch version of eval_tasks_cis; same protocol (see that function)."""
     model.eval()
-    cls_seen_so_far = set()
-    result = []
+    subgraphs = _eval_subgraphs(continuum, args)
+    n_tasks = len(tasks_te)
+    last_t = max(0, min(int(cur_t), n_tasks - 1))
+
+    result = [float('nan')] * n_tasks   # nan = not delivered, so not graded
     total_size = 0
     total_pred = 0
-    current_result = []
-    current_avg_acc = 0
-
-    if args.setting in ['tfo_bb', 'tfo_gaussian']:
-        subgraphs = continuum
-    else:
-        subgraphs = continuum.graphs
+    head = _common_head(subgraphs, tasks_te, last_t)
 
     sampler = dgl.dataloading.NeighborSampler(
         args.n_nbs_sample
@@ -501,16 +517,12 @@ def eval_tasks_cis_batch(model, continuum, tasks_te, cur_t, args):
     )
     bs = args.batch_size
 
-    for t, task_te in enumerate(tasks_te):
+    for t in range(last_t + 1):
+        task_te = tasks_te[t]
         g = subgraphs[t]
         if args.cuda:
             g = g.to(device='cuda:{}'.format(args.gpu))
         labels = g.dstdata['label'].squeeze()
-
-        cls_seen_so_far.update(labels[task_te].unique())
-        offset1, offset2 = 0, max(cls_seen_so_far) + 1
-        if offset2 % 2 != 0:
-            offset2 += 1
 
         correct_t = 0
         total_t = 0
@@ -524,24 +536,20 @@ def eval_tasks_cis_batch(model, continuum, tasks_te, cur_t, args):
                 batch_labels = labels[ids_bt]
 
                 output, _ = model.forward_batch(blocks, feats)
-                logits = output[:, offset1:offset2]
+                logits = output[:, 0:head]
 
                 _, pred = torch.max(logits, dim=1)
                 correct_t += (pred == batch_labels).sum().item()
                 total_t += len(batch_labels)
 
-        acc = correct_t / total_t
-        result.append(acc)
+        result[t] = correct_t / total_t
 
         total_pred += correct_t
         total_size += total_t
 
-        if t == cur_t:
-            current_result = [res for res in result]
-            current_avg_acc = total_pred / total_size
-            print(f'acc till {t}: {current_avg_acc}')
-
-    return result, total_pred / total_size, current_result, current_avg_acc
+    avg_acc = total_pred / total_size
+    print(f'acc till {last_t}: {avg_acc}')
+    return result, avg_acc, result[:last_t + 1], avg_acc
 
 
 def pipeline_tfo(dataset, continuum, tasks_te, args):

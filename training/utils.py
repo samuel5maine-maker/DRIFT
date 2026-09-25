@@ -141,6 +141,9 @@ def result_name(args):
         name += '_clsincre'
     if args.time_streaming:
         name += f'_timestream{args.n_time_tasks}'
+    # scores under the common-head evaluator must not land on top of results written by the
+    # original per-task-prefix evaluator, whose filenames carry no eval tag
+    name += '_evalcommonhead'
     return name + method_suffix(args) + f'_seed{args.seed}'
 
 

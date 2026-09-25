@@ -54,7 +54,9 @@ def load():
             result_list, avg_acc_list = pickle.load(f)[:2]
         acc, res = np.asarray(avg_acc_list, float), np.asarray(result_list, float)
         d = m.groupdict()
-        rows.append({**d, 'seed': int(d['seed']), 'AAUC': 100 * acc.mean(), 'AFs': 100 * (res[-1] - res.max(0)).mean()})
+        # nan-aware: a task is ungraded (nan) until the stream has delivered it
+        rows.append({**d, 'seed': int(d['seed']), 'AAUC': 100 * acc.mean(),
+                     'AFs': 100 * np.nanmean(res[-1] - np.nanmax(res, 0))})
     return pd.DataFrame(rows)
 
 

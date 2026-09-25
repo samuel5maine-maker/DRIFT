@@ -147,6 +147,8 @@ class EvalTelemetry:
         if self.tel is None:
             return
         for k, acc in enumerate(res_per_t):
+            if acc != acc:      # nan: task not delivered at this checkpoint, so not graded
+                continue
             self.tel.log('per_task_accuracy', {'step': step, 'method': self.method, 'seed': self.args.seed,
                                                'task': k, 'accuracy': float(acc)})
         self._occupancy(step, life_model)
@@ -157,6 +159,8 @@ class EvalTelemetry:
             return
         self._alt_curves(step, life_model, eval_fn)
         for k, acc in enumerate(res_per_t):
+            if acc != acc:      # nan: not graded (cannot happen at the final checkpoint, where all tasks are delivered)
+                continue
             self.tel.log('per_task_accuracy', {'step': step, 'method': self.method, 'seed': self.args.seed,
                                                'task': k, 'accuracy': float(acc)})
         counts = self._occupancy(step, life_model)
