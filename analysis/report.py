@@ -56,7 +56,7 @@ def load_results():
                      'regime': d['setting'], 'l_th': lth, 'std_th': float(d['sth']) if d['sth'] else math.nan,
                      'extra': d['extra'], 'seed': int(d['seed']),
                      'AAUC': 100 * acc.mean(), 'AA_final': 100 * acc[-1],
-                     # nan-aware: under --eval_protocol common_head a task is ungraded (nan) until delivered
+                     # nan-aware: a task is ungraded (nan) until the stream has delivered it
                      'FM': 100 * np.nanmean(res[-1] - np.nanmax(res, axis=0)), 'seconds': time_spent})
     return pd.DataFrame(rows)
 

@@ -143,10 +143,6 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=10)
     parser.add_argument('--minibatch', type=strtobool, default=True, help='whether to use the mini-batch training')
     parser.add_argument('--eval_batch', type=strtobool, default=False, help='whether to use the mini-batch evaluating')
-    parser.add_argument('--eval_protocol', type=str, default='common_head', choices=['common_head', 'legacy'],
-                        help="class-IL evaluation rule. 'common_head': grade only the tasks delivered so far, each over "
-                             "every class delivered so far. 'legacy': DRIFT's original rule, every task graded over only "
-                             "the classes of tasks up to itself (see analysis/gaussian_science/EVAL_DECOMPOSITION.md)")
     parser.add_argument('--batch_shuffle', type=strtobool, default=True, help='whether to shuffle the data when constructing the dataloader')
     parser.add_argument('--sample_nbs', type=strtobool, default=True, help='whether to sample neighbors instead of using all')
     parser.add_argument('--n_nbs_sample', type=lambda x: [int(i) for i in x.replace(' ', '').split(',')], default=[10, 25], help='number of neighbors to sample per hop, use comma to separate the numbers when using the command line, e.g. 10,25 or 10, 25')

@@ -67,7 +67,7 @@ def confusion_matrix(result_t, result_a, avg_acc, tasks_to_preserve=0, fname=Non
 def tf_metrics(result_a, avg_acc, fname=None):
     """A_AUC and AF_s.
 
-    Under --eval_protocol common_head a task that had not been delivered at a checkpoint is not graded
+    A task that had not been delivered at a checkpoint is not graded
     and enters `result_a` as nan, so the peak is taken over the checkpoints where the task existed.
     The final row is always fully graded, so every task has a final score to compare against its peak.
     """

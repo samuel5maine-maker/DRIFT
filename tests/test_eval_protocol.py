@@ -1,8 +1,8 @@
-"""Evaluation protocol: --eval_protocol common_head vs legacy (pipeline.eval_tasks_cis).
+"""Evaluation protocol: pipeline.eval_tasks_cis grades only delivered tasks, over one common head.
 
-The fixture is a 3-task / 6-class stream whose logits always favour class 4, a late class. Under the
-legacy rule class 4 is deleted from the head while early tasks are graded, so those tasks score 100%;
-under the common head it can win, so they score 0%. That difference is the whole point of the change.
+The fixture is a 3-task / 6-class stream whose logits always favour class 4, a late class. Before this
+change class 4 was deleted from the head while earlier tasks were graded, so they scored 100%; with a
+common head it can win, so they score 0%. That difference is the whole point of the change.
 """
 import os
 import sys
@@ -83,9 +83,6 @@ class Args:
     gpu = 0
     n_cls_per_task = 2
 
-    def __init__(self, eval_protocol):
-        self.eval_protocol = eval_protocol
-
 
 def fixture():
     """Task t holds classes 2t and 2t+1, one test node each. Every node's largest logit is class 4."""
@@ -106,7 +103,7 @@ def fixture():
 class TestCommonHead(unittest.TestCase):
     def test_undelivered_tasks_are_not_graded(self):
         graphs, tasks_te, model = fixture()
-        result, _, current, _ = pipeline.eval_tasks_cis(model, graphs, tasks_te, 1, Args('common_head'))
+        result, _, current, _ = pipeline.eval_tasks_cis(model, graphs, tasks_te, 1, Args())
         self.assertEqual(len(result), N_TASKS)
         self.assertTrue(result[2] != result[2], 'task 2 was not delivered, so it must be nan')
         self.assertEqual(len(current), 2)
@@ -115,87 +112,23 @@ class TestCommonHead(unittest.TestCase):
         graphs, tasks_te, model = fixture()
         # cur_t=2: classes 0..5 delivered, so class 4 competes everywhere. Tasks 0 and 1 lose both nodes
         # to it; task 2 owns class 4, so its class-4 node is right and its class-5 node is not.
-        result, avg, _, _ = pipeline.eval_tasks_cis(model, graphs, tasks_te, 2, Args('common_head'))
+        result, avg, _, _ = pipeline.eval_tasks_cis(model, graphs, tasks_te, 2, Args())
         self.assertEqual(result, [0.0, 0.0, 0.5])
         self.assertAlmostEqual(avg, 1.0 / 6.0)
 
     def test_head_width_follows_delivered_classes(self):
         graphs, tasks_te, _ = fixture()
-        args = Args('common_head')
-        self.assertEqual(pipeline._common_head(graphs, tasks_te, 0, args), 2)
-        self.assertEqual(pipeline._common_head(graphs, tasks_te, 1, args), 4)
-        self.assertEqual(pipeline._common_head(graphs, tasks_te, 2, args), 6)
+        self.assertEqual(pipeline._common_head(graphs, tasks_te, 0), 2)
+        self.assertEqual(pipeline._common_head(graphs, tasks_te, 1), 4)
+        self.assertEqual(pipeline._common_head(graphs, tasks_te, 2), 6)
 
     def test_pooled_accuracy_covers_only_graded_tasks(self):
         graphs, tasks_te, model = fixture()
         # cur_t=1: head is 4 wide, so class 4 cannot win and both graded tasks are perfect
-        result, avg, _, current_avg = pipeline.eval_tasks_cis(model, graphs, tasks_te, 1, Args('common_head'))
+        result, avg, _, current_avg = pipeline.eval_tasks_cis(model, graphs, tasks_te, 1, Args())
         self.assertEqual(avg, 1.0)
         self.assertEqual(current_avg, 1.0)
         self.assertEqual(result[:2], [1.0, 1.0])
-
-
-class TestLegacyUnchanged(unittest.TestCase):
-    def test_legacy_grades_all_tasks_with_a_per_task_head(self):
-        graphs, tasks_te, model = fixture()
-        result, avg, current, current_avg = pipeline.eval_tasks_cis(model, graphs, tasks_te, 1, Args('legacy'))
-        # tasks 0 and 1 are graded without class 4 and score 1.0; task 2's head reaches class 4, which
-        # takes its class-5 node. Note task 2 is graded although cur_t=1: legacy grades undelivered tasks.
-        self.assertEqual(result, [1.0, 1.0, 0.5])
-        self.assertAlmostEqual(avg, 5.0 / 6.0)
-        self.assertEqual(current, [1.0, 1.0])
-        self.assertEqual(current_avg, 1.0)
-
-    def test_legacy_grades_undelivered_tasks(self):
-        graphs, tasks_te, model = fixture()
-        result, _, _, _ = pipeline.eval_tasks_cis(model, graphs, tasks_te, 0, Args('legacy'))
-        self.assertEqual(len(result), N_TASKS)
-        self.assertTrue(all(value == value for value in result), 'legacy grades every task at every checkpoint')
-
-
-def original_eval_tasks_cis(model, continuum, tasks_te, cur_t, args):
-    """DRIFT's evaluator as it stood before this branch (pipeline.py@986dab9), for a differential test."""
-    model.eval()
-    cls_seen_so_far = set()
-    result = []
-    total_size = 0
-    total_pred = 0
-    current_result = []
-    current_avg_acc = 0
-    subgraphs = continuum if args.setting in ['tfo_bb', 'tfo_gaussian'] else continuum.graphs
-    for i, task_te in enumerate(tasks_te):
-        t = i
-        subgraph = subgraphs[t]
-        features, labels = subgraph.srcdata['feat'], subgraph.dstdata['label'].squeeze()
-        cls_seen_so_far.update(labels[task_te].unique())
-        offset1, offset2 = 0, max(cls_seen_so_far) + 1
-        if offset2 % 2 != 0:
-            offset2 += 1
-        with torch.no_grad():
-            output, _ = model(subgraph, features)
-            logits = output[task_te][:, offset1:offset2]
-            labels = labels[task_te]
-            _, indices = torch.max(logits, dim=1)
-            correct = torch.sum(indices == labels)
-            result.append(correct.item() * 1.0 / len(labels))
-            total_size += len(labels)
-            total_pred += correct.item()
-        if t == cur_t:
-            current_result = [res for res in result]
-            current_avg_acc = total_pred * 1.0 / total_size
-    return result, total_pred * 1.0 / total_size, current_result, current_avg_acc
-
-
-class TestLegacyMatchesOriginal(unittest.TestCase):
-    def test_identical_on_random_logits(self):
-        torch.manual_seed(0)
-        for trial in range(20):
-            graphs, tasks_te, _ = fixture()
-            model = FakeModel({id(g): torch.randn(2, N_CLS) for g in graphs})
-            for cur_t in range(N_TASKS):
-                expected = original_eval_tasks_cis(model, graphs, tasks_te, cur_t, Args('legacy'))
-                actual = pipeline.eval_tasks_cis(model, graphs, tasks_te, cur_t, Args('legacy'))
-                self.assertEqual(actual, expected, f'trial {trial}, cur_t {cur_t}')
 
 
 class TestMetricsToleratesUngraded(unittest.TestCase):

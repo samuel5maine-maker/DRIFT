@@ -141,10 +141,9 @@ def result_name(args):
         name += '_clsincre'
     if args.time_streaming:
         name += f'_timestream{args.n_time_tasks}'
-    if getattr(args, 'eval_protocol', 'legacy') != 'legacy':
-        # keep the historical filenames for legacy-protocol runs; scores under a different
-        # evaluation rule must not land on top of them
-        name += f'_eval{args.eval_protocol}'
+    # scores under the common-head evaluator must not land on top of results written by the
+    # original per-task-prefix evaluator, whose filenames carry no eval tag
+    name += '_evalcommonhead'
     return name + method_suffix(args) + f'_seed{args.seed}'
 
 
